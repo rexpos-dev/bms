@@ -111,6 +111,143 @@ function KpiDefRow({ def, role }: { def: KpiDefinitionRow; role: UserRole }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+interface TmsEmployee {
+  employeeId: number;
+  name: string;
+  email: string;
+  totalPoints: number;
+}
+
+interface DesignerPointsResponse {
+  designers: DesignerPoint[];
+  tmsEmployees: TmsEmployee[];
+}
+
+interface DesignerPoint {
+  userId: string;
+  fullName: string;
+  email: string;
+  matched: boolean;
+  totalPoints: number;
+  tmsEmployeeId: number | null;
+  tmsName: string | null;
+}
+
+// ── Designer points from TMS Pro (read-only) + sync ───────────────────────────
+
+function DesignerPointsPanel() {
+  const qc = useQueryClient();
+  const [result, setResult] = useState<string | null>(null);
+
+  const pointsQuery = useQuery({
+    queryKey: ['designer-points'],
+    queryFn: async () => (await api.get<DesignerPointsResponse>('/kpis/designers/points')).data,
+    retry: false,
+  });
+
+  const sync = useMutation({
+    mutationFn: async () =>
+      (await api.post<{ matched: number; month: number; year: number }>('/kpis/designers/sync')).data,
+    onSuccess: (data) => {
+      setResult(`Synced ${data.matched} designer(s) for ${String(data.month).padStart(2, '0')}/${data.year}. Their KPI scores were regenerated from TMS points.`);
+      qc.invalidateQueries({ queryKey: ['designer-points'] });
+    },
+  });
+
+  return (
+    <div className="card" style={{ marginTop: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+        <div>
+          <div style={{ fontWeight: 700 }}>Designer Points — TMS Pro</div>
+          <p style={{ margin: '0.25rem 0 0', fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: 560 }}>
+            Read-only total points per designer pulled from TMS Pro. <strong>Sync</strong> distributes each
+            designer&apos;s points across their KPI weights (proportionally) to generate this month&apos;s score.
+            Matched by email, then by full name. Note: TMS only returns employees who have <strong>earned KPI
+            points</strong> — a designer with no logged TMS activity shows &quot;no KPI points&quot; even if their
+            TMS profile exists. See the raw TMS list below.
+          </p>
+        </div>
+        <button type="button" className="btn btn-primary" disabled={sync.isPending} onClick={() => { setResult(null); sync.mutate(); }}>
+          {sync.isPending ? 'Syncing…' : 'Sync from TMS'}
+        </button>
+      </div>
+
+      {result && <p style={{ color: 'var(--success)', fontSize: '0.85rem' }}>✓ {result}</p>}
+      {sync.isError && <p className="error-text">Sync failed — verify the TMS token / URL configured on the server.</p>}
+      {pointsQuery.isLoading && <p>Loading designer points…</p>}
+      {pointsQuery.isError && <p className="error-text">Could not load designer points (TMS API unreachable or token missing on the server).</p>}
+
+      {pointsQuery.data && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border)', color: 'var(--text-muted)' }}>
+                <th style={{ textAlign: 'left', padding: '0.5rem 0', fontWeight: 600 }}>Designer</th>
+                <th style={{ textAlign: 'left', padding: '0.5rem 0', fontWeight: 600 }}>Email</th>
+                <th style={{ textAlign: 'center', padding: '0.5rem 0', fontWeight: 600 }}>TMS Match</th>
+                <th style={{ textAlign: 'right', padding: '0.5rem 0', fontWeight: 600 }}>Total Points</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pointsQuery.data.designers.map((d) => (
+                <tr key={d.userId} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '0.5rem 0', fontWeight: 600 }}>{d.fullName}</td>
+                  <td style={{ padding: '0.5rem 0', color: 'var(--text-muted)' }}>{d.email}</td>
+                  <td style={{ padding: '0.5rem 0', textAlign: 'center' }}>
+                    {d.matched
+                      ? <span style={{ color: 'var(--success)' }}>✓ {d.tmsName ?? 'matched'}</span>
+                      : <span style={{ color: 'var(--text-muted)' }}>no KPI points</span>}
+                  </td>
+                  <td style={{ padding: '0.5rem 0', textAlign: 'right', fontWeight: 700 }}>{d.totalPoints}</td>
+                </tr>
+              ))}
+              {pointsQuery.data.designers.length === 0 && (
+                <tr><td colSpan={4} style={{ padding: '0.75rem 0', color: 'var(--text-muted)' }}>No designers found.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {pointsQuery.data && (
+        <div style={{ marginTop: '1.25rem' }}>
+          <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+            Employees returned by TMS ({pointsQuery.data.tmsEmployees.length})
+          </div>
+          {pointsQuery.data.tmsEmployees.length === 0 ? (
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
+              TMS returned no employees for the current range (all-time). If you expect data, the token may
+              be scoped to a different account or there are no KPI events yet.
+            </p>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--border)', color: 'var(--text-muted)' }}>
+                    <th style={{ textAlign: 'left', padding: '0.4rem 0', fontWeight: 600 }}>TMS ID</th>
+                    <th style={{ textAlign: 'left', padding: '0.4rem 0', fontWeight: 600 }}>Name</th>
+                    <th style={{ textAlign: 'left', padding: '0.4rem 0', fontWeight: 600 }}>Email</th>
+                    <th style={{ textAlign: 'right', padding: '0.4rem 0', fontWeight: 600 }}>Points</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pointsQuery.data.tmsEmployees.map((e) => (
+                    <tr key={e.employeeId} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '0.4rem 0', fontFamily: 'monospace' }}>{e.employeeId}</td>
+                      <td style={{ padding: '0.4rem 0' }}>{e.name}</td>
+                      <td style={{ padding: '0.4rem 0', color: 'var(--text-muted)' }}>{e.email}</td>
+                      <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 700 }}>{e.totalPoints}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function KpiSettingsPage() {
   const qc = useQueryClient();
   const [role, setRole] = useState<UserRole>('INSTALLER');
@@ -211,6 +348,8 @@ export function KpiSettingsPage() {
         </form>
         {create.isError && <p className="error-text" style={{ marginTop: '0.5rem' }}>Failed to add KPI — a KPI with that name may already exist for this role.</p>}
       </div>
+
+      <DesignerPointsPanel />
     </div>
   );
 }

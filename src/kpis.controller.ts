@@ -77,6 +77,31 @@ export class KpisController {
     return this.kpisService.payIncentive(id);
   }
 
+  // ── Designer KPI: external TMS Pro integration (admin) ──────────────────────
+
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
+  @Get('designers/points')
+  getDesignerPoints(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.kpisService.getDesignerPoints(from, to);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
+  @Post('designers/sync')
+  syncDesignerKpis(
+    @Query('month') month?: string,
+    @Query('year') year?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const now = new Date();
+    return this.kpisService.syncDesignerKpis(
+      month ? parseInt(month) : now.getMonth() + 1,
+      year ? parseInt(year) : now.getFullYear(),
+      from,
+      to,
+    );
+  }
+
   // ── KPI definitions per role ────────────────────────────────────────────────
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)

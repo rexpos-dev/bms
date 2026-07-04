@@ -994,3 +994,20 @@ html, body { max-width: 100%; overflow-x: hidden; }
   /* disable sticky header on mobile (avoids overlap while scrolling) */
   thead, th { position: static; }
 }
+
+/* ============================================================
+   Mobile: collapse multi-column card grids to a single column
+   (auto-fit minmax(...px) tracks overflow narrow screens → overlap)
+   ============================================================ */
+@media (max-width: 768px) {
+  [style*="minmax(460px"],
+  [style*="minmax(440px"],
+  [style*="minmax(420px"],
+  [style*="minmax(400px"],
+  [style*="minmax(320px"],
+  [style*="minmax(300px"],
+  [style*="minmax(280px"],
+  [style*="minmax(260px"] {
+    grid-template-columns: 1fr !important;
+  }
+}

@@ -27,7 +27,6 @@ import {
   Droplets,
   UserCog,
   LogOut,
-  Zap,
   Menu,
   X,
   ChevronsLeft,
@@ -150,17 +149,6 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, NavItem[]> = {
     { to: '/earnings', label: 'My Earnings', indent: true },
     { to: '/withdrawals', label: 'Withdrawals', indent: true },
   ],
-};
-
-const PORTAL_LABEL: Record<UserRole, string> = {
-  SUPER_ADMIN: 'SDLMP Admin',
-  INSTALLER: 'SDLMP Installer',
-  DEVELOPER: 'SDLMP Developer',
-  DESIGNER: 'SDLMP Designer',
-  MACHINE_OPERATOR: 'SDLMP Operator',
-  LIAISON: 'SDLMP Liaison',
-  ADMIN_STAFF: 'SDLMP Staff',
-  SALES_STAFF: 'SDLMP Sales',
 };
 
 const ROLE_LABEL: Record<UserRole, string> = {
@@ -394,7 +382,21 @@ export function AdminLayout() {
               boxShadow: '0 4px 14px rgba(79, 70, 229, 0.5)',
             }}
           >
-            <Zap size={17} color="#fff" strokeWidth={2.5} />
+            <svg width="20" height="20" viewBox="0 0 48 48" fill="none">
+              <defs>
+                <linearGradient id="navRing" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stopColor="#22d3ee" />
+                  <stop offset="1" stopColor="#e879f9" />
+                </linearGradient>
+              </defs>
+              <circle cx="24" cy="24" r="13" fill="none" stroke="#fff" strokeWidth="5" />
+              <circle cx="24" cy="24" r="4.5" fill="#e879f9" />
+              <g transform="rotate(-24 24 24)">
+                <ellipse cx="24" cy="24" rx="21" ry="8.5" fill="none" stroke="url(#navRing)" strokeWidth="2.6" />
+                <circle cx="3" cy="24" r="2.4" fill="#22d3ee" />
+                <circle cx="45" cy="24" r="2.4" fill="#e879f9" />
+              </g>
+            </svg>
           </div>
           {!railCollapsed && (
             <div>
@@ -407,7 +409,7 @@ export function AdminLayout() {
                   lineHeight: 1.2,
                 }}
               >
-                {user ? PORTAL_LABEL[user.role] : 'SDLMP'}
+                Orbit Console
               </div>
               <div
                 style={{
@@ -418,7 +420,7 @@ export function AdminLayout() {
                   marginTop: 2,
                 }}
               >
-                Admin Portal
+                Everything orbits here
               </div>
             </div>
           )}

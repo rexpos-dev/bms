@@ -16,6 +16,15 @@ export interface KpiDef {
   auto: boolean;
 }
 
+// Shape returned by TMS Pro's KPI Export API (GET /api/v1/kpi/export).
+interface TmsKpiEmployee {
+  employee_id: number;
+  employee_name: string;
+  employee_email: string;
+  total_points: number;
+  activity?: Array<{ id: number; points: number; bonus_type: string; order_number: string; task_name: string | null; created_at: string }>;
+}
+
 // Roles that have KPI tracking, dashboards, and incentive eligibility.
 export const KPI_ROLES: UserRole[] = [
   UserRole.INSTALLER,
@@ -216,11 +225,13 @@ export class KpisService implements OnModuleInit {
     const kpis = defs.map((def) => {
       let actual = 0;
       let isManual = false;
-      if (def.auto) {
+      const saved = manualMap[def.name];
+      if (saved) {
+        // An explicit manual entry / external sync overrides auto computation.
+        actual = Number(saved.actualValue);
+        isManual = true;
+      } else if (def.auto) {
         actual = autoValues[def.name] ?? 0;
-      } else {
-        const saved = manualMap[def.name];
-        if (saved) { actual = Number(saved.actualValue); isManual = true; }
       }
       return {
         name: def.name,
@@ -528,5 +539,124 @@ export class KpisService implements OnModuleInit {
         .filter((o) => { const d = new Date(o.createdAt); return d.getMonth() === m.month && d.getFullYear() === m.year; })
         .reduce((s, o) => s + Number(o.salePrice), 0),
     }));
+  }
+
+  // ── Designer KPI: external TMS Pro integration ─────────────────────────────
+
+  private async fetchTmsDesignerPoints(from?: string, to?: string): Promise<TmsKpiEmployee[]> {
+    const base = process.env.TMS_KPI_API_URL ?? 'https://tmspro.up.railway.app';
+    const token = process.env.TMS_KPI_API_TOKEN;
+    if (!token) throw new BadRequestException('TMS_KPI_API_TOKEN is not configured on the server.');
+
+    const url = new URL('/api/v1/kpi/export', base);
+    if (from) url.searchParams.set('from', from);
+    if (to) url.searchParams.set('to', to);
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    }).catch(() => {
+      throw new BadRequestException('Could not reach the TMS KPI API.');
+    });
+    if (res.status === 401) throw new BadRequestException('TMS KPI API rejected the token (401 Unauthorized).');
+    if (!res.ok) throw new BadRequestException(`TMS KPI API returned HTTP ${res.status}.`);
+
+    // Unauthenticated requests are redirected to an HTML login page rather than
+    // a 401 JSON, so guard against a non-JSON body (invalid/expired token).
+    const contentType = res.headers.get('content-type') ?? '';
+    if (!contentType.includes('application/json')) {
+      throw new BadRequestException('TMS KPI API did not return JSON — the token may be invalid or lack the kpi:read ability.');
+    }
+
+    const data = (await res.json()) as unknown;
+    return Array.isArray(data) ? (data as TmsKpiEmployee[]) : [];
+  }
+
+  private designerUsers() {
+    return this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        OR: [{ role: UserRole.DESIGNER }, { additionalRoles: { some: { role: UserRole.DESIGNER } } }],
+      },
+      select: { id: true, fullName: true, email: true },
+    });
+  }
+
+  /**
+   * Read-only: total points per designer, matched to our users by email first,
+   * then by normalized full name as a fallback (so all designers can match even
+   * when the two systems store slightly different emails).
+   */
+  async getDesignerPoints(from?: string, to?: string) {
+    const [tms, designers] = await Promise.all([this.fetchTmsDesignerPoints(from, to), this.designerUsers()]);
+    const norm = (v?: string | null) => (v ?? '').trim().toLowerCase();
+
+    const byEmail = new Map<string, TmsKpiEmployee>();
+    const byName = new Map<string, TmsKpiEmployee>();
+    for (const t of tms) {
+      if (t.employee_email) byEmail.set(norm(t.employee_email), t);
+      if (t.employee_name) byName.set(norm(t.employee_name), t);
+    }
+
+    const matched = designers.map((d) => {
+      const t = byEmail.get(norm(d.email)) ?? byName.get(norm(d.fullName));
+      return {
+        userId: d.id,
+        fullName: d.fullName,
+        email: d.email,
+        matched: !!t,
+        matchedBy: t ? (byEmail.get(norm(d.email)) ? 'email' : 'name') : null,
+        totalPoints: t?.total_points ?? 0,
+        tmsEmployeeId: t?.employee_id ?? null,
+        tmsName: t?.employee_name ?? null,
+      };
+    });
+
+    // Also surface the raw TMS roster so admins can see exactly who/what TMS
+    // returned (name, email, id) and diagnose any unmatched designers.
+    const tmsEmployees = tms.map((t) => ({
+      employeeId: t.employee_id,
+      name: t.employee_name,
+      email: t.employee_email,
+      totalPoints: t.total_points,
+    }));
+
+    return { designers: matched, tmsEmployees };
+  }
+
+  /**
+   * Pull designer total points from TMS Pro and distribute each designer's
+   * points across their DESIGNER KPI definitions proportionally to weight,
+   * storing them as manual KpiResults so the existing weighted score generates.
+   */
+  async syncDesignerKpis(month: number, year: number, from?: string, to?: string) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const lastDay = new Date(year, month, 0).getDate();
+    const f = from ?? `${year}-${pad(month)}-01`;
+    const t = to ?? `${year}-${pad(month)}-${pad(lastDay)}`;
+
+    const { designers: points } = await this.getDesignerPoints(f, t);
+    const defs = await this.getRoleDefs(UserRole.DESIGNER);
+    const totalWeight = defs.reduce((sum, d) => sum + d.weight, 0) || 1;
+
+    const designers: Array<Record<string, unknown>> = [];
+    for (const p of points) {
+      if (!p.matched) {
+        designers.push({ ...p, applied: false, totalScore: 0 });
+        continue;
+      }
+      for (const def of defs) {
+        const allocated = p.totalPoints * (def.weight / totalWeight);
+        const score = kpiScore(allocated, def.target, def.weight);
+        await this.prisma.kpiResult.upsert({
+          where: { userId_month_year_kpiName: { userId: p.userId, month, year, kpiName: def.name } },
+          create: { userId: p.userId, month, year, kpiName: def.name, actualValue: allocated, targetValue: def.target, weight: def.weight, score, isManual: true },
+          update: { actualValue: allocated, score, isManual: true },
+        });
+      }
+      const dash = await this.getDashboard(p.userId, UserRole.DESIGNER, month, year);
+      designers.push({ ...p, applied: true, totalScore: dash.totalScore });
+    }
+
+    return { month, year, from: f, to: t, matched: designers.filter((d) => d.matched).length, designers };
   }
 }
