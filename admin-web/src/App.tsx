@@ -5,7 +5,6 @@ import { AnalyticsPage } from './pages/AnalyticsPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { ClientsPage } from './pages/ClientsPage';
 import { DashboardPage } from './pages/DashboardPage';
-import { DesignJobsPage } from './pages/DesignJobsPage';
 import { DevProjectsPage } from './pages/DevProjectsPage';
 import { EarningsPage } from './pages/EarningsPage';
 import { JobOrderPage } from './pages/JobOrderPage';
@@ -13,7 +12,6 @@ import { JobOrdersPage } from './pages/JobOrdersPage';
 import { JobsPage } from './pages/JobsPage';
 import { LicensesPage } from './pages/LicensesPage';
 import { LoginPage } from './pages/LoginPage';
-import { MachineOperatorPage } from './pages/MachineOperatorPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -26,7 +24,7 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route
         element={
-          <RequireAuth roles={['SUPER_ADMIN', 'INSTALLER', 'DEVELOPER', 'DESIGNER', 'MACHINE_OPERATOR', 'LIAISON', 'ADMIN_STAFF', 'SALES_STAFF']}>
+          <RequireAuth roles={['SUPER_ADMIN', 'INSTALLER', 'DEVELOPER', 'DESIGNER', 'LIAISON', 'ADMIN_STAFF', 'SALES_STAFF']}>
             <AdminLayout />
           </RequireAuth>
         }
@@ -34,24 +32,6 @@ function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/earnings" element={<EarningsPage />} />
         <Route path="/withdrawals" element={<WithdrawalsPage />} />
-
-        <Route
-          path="/ink-tracking"
-          element={
-            <RequireAuth roles={['MACHINE_OPERATOR']}>
-              <MachineOperatorPage />
-            </RequireAuth>
-          }
-        />
-
-        <Route
-          path="/design-jobs"
-          element={
-            <RequireAuth roles={['DESIGNER', 'MACHINE_OPERATOR', 'ADMIN_STAFF', 'SUPER_ADMIN']}>
-              <DesignJobsPage />
-            </RequireAuth>
-          }
-        />
 
         <Route
           path="/dev-projects"
@@ -65,7 +45,7 @@ function App() {
         <Route
           path="/jobs"
           element={
-            <RequireAuth roles={['SUPER_ADMIN', 'INSTALLER', 'ADMIN_STAFF', 'LIAISON', 'SALES_STAFF', 'MACHINE_OPERATOR']}>
+            <RequireAuth roles={['SUPER_ADMIN', 'INSTALLER', 'ADMIN_STAFF', 'LIAISON', 'SALES_STAFF']}>
               <JobsPage />
             </RequireAuth>
           }
@@ -79,17 +59,9 @@ function App() {
           }
         />
         <Route
-          path="/job-orders/design"
-          element={
-            <RequireAuth roles={['DESIGNER', 'MACHINE_OPERATOR', 'ADMIN_STAFF', 'SUPER_ADMIN', 'LIAISON', 'SALES_STAFF']}>
-              <JobOrdersPage type="DESIGN" />
-            </RequireAuth>
-          }
-        />
-        <Route
           path="/job-orders/:jobId"
           element={
-            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'DESIGNER', 'MACHINE_OPERATOR', 'LIAISON', 'SALES_STAFF']}>
+            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'DESIGNER', 'LIAISON', 'SALES_STAFF']}>
               <JobOrderPage />
             </RequireAuth>
           }

@@ -1,4 +1,4 @@
-export type UserRole = 'SUPER_ADMIN' | 'INSTALLER' | 'DEVELOPER' | 'DESIGNER' | 'MACHINE_OPERATOR' | 'LIAISON' | 'ADMIN_STAFF' | 'SALES_STAFF';
+export type UserRole = 'SUPER_ADMIN' | 'INSTALLER' | 'DEVELOPER' | 'DESIGNER' | 'LIAISON' | 'ADMIN_STAFF' | 'SALES_STAFF';
 
 export interface AuthenticatedUser {
   id: string;
@@ -128,7 +128,6 @@ export interface Withdrawal {
 }
 
 export type DiscountType = 'FIXED' | 'PERCENTAGE';
-export type JobOrderType = 'SOFTWARE' | 'DESIGN';
 export type JobOrderStatus = 'DRAFT' | 'FINALIZED' | 'ON_GOING' | 'COMPLETED' | 'CANCELLED';
 
 export interface JobOrderItem {
@@ -144,9 +143,7 @@ export interface JobOrderItem {
 
 export interface JobOrder {
   id: string;
-  type: JobOrderType;
   jobId: string | null;
-  designJobId: string | null;
   clientId: string;
   productId: string | null;
   salePrice: string;
@@ -157,7 +154,6 @@ export interface JobOrder {
   createdAt: string;
   updatedAt: string;
   job?: Job;
-  designJob?: DesignJob;
   client?: Client;
   product?: SoftwareProduct;
   items: JobOrderItem[];
@@ -254,64 +250,6 @@ export interface Incentive {
   remarks: string | null;
   createdAt: string;
   user?: Pick<AuthenticatedUser, 'fullName' | 'role'>;
-}
-
-export type PrinterMachineModel = 'TS100_1600_SUBLIMATION' | 'JV100_160' | 'UCJV300_160';
-export type InkColor = 'BLACK' | 'CYAN' | 'MAGENTA' | 'YELLOW' | 'CLEAR' | 'WHITE';
-
-export interface MachineInk {
-  id: string;
-  machineId: string;
-  inkColor: InkColor;
-  maxCapacity: number;
-  currentUsage: number;
-  lastRefillAt: string | null;
-}
-
-export interface InkUsageLog {
-  id: string;
-  machineId: string;
-  machineInkId: string;
-  amountUsed: number;
-  jobReference: string | null;
-  notes: string | null;
-  recordedAt: string;
-  recordedBy: string | null;
-}
-
-export interface PrinterMachine {
-  id: string;
-  model: PrinterMachineModel;
-  label: string;
-  machineInks: MachineInk[];
-}
-
-export type DesignJobStatus = 'PENDING' | 'ASSIGNED' | 'ON_GOING' | 'COMPLETED' | 'CANCELLED';
-
-export interface DesignJobUpdateEntry {
-  id: string;
-  designJobId: string;
-  authorId: string;
-  message: string | null;
-  status: DesignJobStatus | null;
-  createdAt: string;
-  author?: { id: string; fullName: string; role: UserRole };
-}
-
-export interface DesignJob {
-  id: string;
-  title: string;
-  description: string | null;
-  clientName: string | null;
-  designerId: string;
-  operatorId: string | null;
-  status: DesignJobStatus;
-  dueDate: string | null;
-  createdAt: string;
-  updatedAt: string;
-  designer?: { id: string; fullName: string };
-  operator?: { id: string; fullName: string };
-  updates?: DesignJobUpdateEntry[];
 }
 
 export interface NenposClient {
