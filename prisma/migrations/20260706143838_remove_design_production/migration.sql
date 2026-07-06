@@ -6,6 +6,10 @@ UPDATE `users` SET `role` = 'ADMIN_STAFF' WHERE `role` = 'MACHINE_OPERATOR';
 -- enum alteration to avoid a data-truncation error.
 DELETE FROM `kpi_definitions` WHERE `role` = 'MACHINE_OPERATOR';
 
+-- Secondary MACHINE_OPERATOR role assignments must be removed before the enum
+-- alteration to avoid a data-truncation error (mirrors the kpi_definitions guard).
+DELETE FROM `user_role_assignments` WHERE `role` = 'MACHINE_OPERATOR';
+
 -- DropForeignKey
 ALTER TABLE `design_job_updates` DROP FOREIGN KEY `design_job_updates_author_id_fkey`;
 
