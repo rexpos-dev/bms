@@ -34,22 +34,11 @@ const MODULES: ResetModuleDef[] = [
   {
     id: 'job-orders',
     label: 'Job Orders',
-    description: 'All software and design job orders and their line items.',
+    description: 'All job orders and their line items.',
     count: (p) => p.jobOrder.count(),
     reset: async (tx) => {
       await tx.jobOrderItem.deleteMany();
       await tx.jobOrder.deleteMany();
-    },
-  },
-  {
-    id: 'design-jobs',
-    label: 'Design Jobs',
-    description: 'All design jobs and their update history. Unlinks them from job orders.',
-    count: (p) => p.designJob.count(),
-    reset: async (tx) => {
-      await tx.jobOrder.updateMany({ where: { designJobId: { not: null } }, data: { designJobId: null } });
-      await tx.designJobUpdate.deleteMany();
-      await tx.designJob.deleteMany();
     },
   },
   {
@@ -110,16 +99,6 @@ const MODULES: ResetModuleDef[] = [
     count: (p) => p.notification.count(),
     reset: async (tx) => {
       await tx.notification.deleteMany();
-    },
-  },
-  {
-    id: 'ink-logs',
-    label: 'Ink Usage & Refill Logs',
-    description: 'All ink usage and refill log entries. Machines and ink tanks are kept.',
-    count: async (p) => (await p.inkUsageLog.count()) + (await p.inkRefillLog.count()),
-    reset: async (tx) => {
-      await tx.inkUsageLog.deleteMany();
-      await tx.inkRefillLog.deleteMany();
     },
   },
   {
