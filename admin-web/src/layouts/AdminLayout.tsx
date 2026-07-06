@@ -6,6 +6,7 @@ import { useAuthStore } from '../lib/auth-store';
 import { logout as apiLogout } from '../lib/api';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { NotificationBell } from '../components/NotificationBell';
+import { RunningTimerWidget } from '../components/RunningTimerWidget';
 import { useServerEvents } from '../lib/useServerEvents';
 import { useNotificationStore } from '../lib/notification-store';
 import type { UserRole } from '../lib/types';
@@ -658,6 +659,7 @@ export function AdminLayout() {
             </PageTransition>
           </AnimatePresence>
         </main>
+        <RunningTimerWidget />
       </div>
     </div>
   );

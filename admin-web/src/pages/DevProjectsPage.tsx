@@ -135,7 +135,10 @@ export function DevProjectsPage() {
   const hasRunning = !!projectsQuery.data?.some((p) => p.status === 'IN_PROGRESS');
   useTick(1000, hasRunning);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['dev-projects'] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['dev-projects'] });
+    qc.invalidateQueries({ queryKey: ['dev-active'] });
+  };
 
   const createProject = useMutation({
     mutationFn: () =>
