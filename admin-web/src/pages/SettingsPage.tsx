@@ -6,16 +6,14 @@ import { Dialog } from '../components/Dialog';
 import { AuditLogsPage } from './AuditLogsPage';
 import { InventoryPage } from './InventoryPage';
 import { KpiSettingsPage } from './KpiSettingsPage';
-import { MachineAdminPage } from './MachineAdminPage';
 import { UsersPage } from './UsersPage';
 
-type SettingsTab = 'company' | 'users' | 'kpis' | 'machines' | 'inventory' | 'database' | 'audit';
+type SettingsTab = 'company' | 'users' | 'kpis' | 'inventory' | 'database' | 'audit';
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'company', label: 'Company Profile' },
   { id: 'users', label: 'Users & Roles' },
   { id: 'kpis', label: 'KPI Settings' },
-  { id: 'machines', label: 'Ink & Machines' },
   { id: 'inventory', label: 'Inventory Management' },
   { id: 'database', label: 'Database Management' },
   { id: 'audit', label: 'Audit Logs' },
@@ -556,7 +554,6 @@ export function SettingsPage() {
       {tab === 'company' && <CompanyProfileTab />}
       {tab === 'users' && <UsersPage />}
       {tab === 'kpis' && <KpiSettingsPage />}
-      {tab === 'machines' && <MachineAdminPage />}
       {tab === 'inventory' && <InventoryPage />}
       {tab === 'database' && <DatabaseManagementTab />}
       {tab === 'audit' && <AuditLogsPage />}

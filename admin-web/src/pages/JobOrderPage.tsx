@@ -27,12 +27,11 @@ async function inlineImages(root: HTMLElement): Promise<void> {
   );
 }
 
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { Dialog } from '../components/Dialog';
-import { useAuthStore } from '../lib/auth-store';
-import type { Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderStatus, SoftwareProduct, DesignJob } from '../lib/types';
+import type { Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderStatus, SoftwareProduct } from '../lib/types';
 
 // Quick-add materials now come from the Inventory (Settings → Inventory Management).
 
@@ -241,14 +240,9 @@ const PRINT_STYLE = `
 
 export function JobOrderPage() {
   const { jobId } = useParams<{ jobId: string }>();
-  const [searchParams] = useSearchParams();
-  const type = (searchParams.get('type') || 'SOFTWARE') as 'SOFTWARE' | 'DESIGN';
-  const isSoftware = type === 'SOFTWARE';
-  
+
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const user = useAuthStore((s) => s.user);
-  const readOnly = user?.role === 'MACHINE_OPERATOR';
 
   // ── Inject print styles once (safe to do in useEffect, not module scope) ──
   useEffect(() => {
@@ -264,9 +258,9 @@ export function JobOrderPage() {
 
   // ── Fetch existing job order ──
   const jobOrderQuery = useQuery({
-    queryKey: ['job-order', jobId, type],
+    queryKey: ['job-order', jobId],
     queryFn: async () => {
-      const endpoint = isSoftware ? `/job-orders/by-job/${jobId}` : `/job-orders/by-design-job/${jobId}`;
+      const endpoint = `/job-orders/by-job/${jobId}`;
       const res = await api.get<JobOrder | null>(endpoint);
       return res.data || null;
     },
@@ -276,23 +270,16 @@ export function JobOrderPage() {
 
   // ── Fetch the parent record ──
   const jobQuery = useQuery({
-    queryKey: ['job', jobId, type],
-    queryFn: async () => {
-      if (isSoftware) {
-        return (await api.get<Job>(`/jobs/${jobId}`)).data;
-      } else {
-        return (await api.get<DesignJob>(`/design-jobs/${jobId}`)).data;
-      }
-    },
+    queryKey: ['job', jobId],
+    queryFn: async () => (await api.get<Job>(`/jobs/${jobId}`)).data,
     enabled: !!jobId,
     retry: false,
   });
 
-  // ── Fetch clients filtered by type (software JO → SOFTWARE, design JO → ADVERTISING) ──
-  const clientType = isSoftware ? 'SOFTWARE' : 'ADVERTISING';
+  // ── Fetch clients / products / inventory ──
   const clientsQuery = useQuery({
-    queryKey: ['clients', clientType],
-    queryFn: async () => (await api.get<Client[]>('/clients', { params: { type: clientType } })).data,
+    queryKey: ['clients', 'SOFTWARE'],
+    queryFn: async () => (await api.get<Client[]>('/clients', { params: { type: 'SOFTWARE' } })).data,
   });
   const productsQuery = useQuery({
     queryKey: ['products'],
@@ -361,43 +348,32 @@ export function JobOrderPage() {
 
   // ── Auto-populate from parent record ──
   useEffect(() => {
-    const parent = jobQuery.data;
-    if (!parent) return;
+    const job = jobQuery.data;
+    if (!job) return;
     if (jobOrderQuery.isPending || jobOrderQuery.isFetching) return;
     if (jobOrderQuery.data) return;
 
-    if (isSoftware) {
-      const job = parent as Job;
-      if (job.clientId) setClientId(job.clientId);
-      if (job.license?.productId) setProductId(job.license.productId);
-    } else {
-      const djob = parent as DesignJob;
-      const foundClient = clientsQuery.data?.find(
-        (c) => c.businessName === djob.clientName || c.clientCode === djob.clientName,
-      );
-      if (foundClient) setClientId(foundClient.id);
-    }
-  }, [jobQuery.data, jobOrderQuery.data, jobOrderQuery.isPending, jobOrderQuery.isFetching, clientsQuery.data, isSoftware]);
+    if (job.clientId) setClientId(job.clientId);
+    if (job.license?.productId) setProductId(job.license.productId);
+  }, [jobQuery.data, jobOrderQuery.data, jobOrderQuery.isPending, jobOrderQuery.isFetching]);
 
   // ── Auto-fill sale price when product changes ──
   useEffect(() => {
-    if (!productId || !isSoftware) return;
+    if (!productId) return;
     const product = productsQuery.data?.find((p) => p.id === productId);
     if (product && !jobOrderQuery.data) {
       setSalePrice(Number(product.price));
     }
-  }, [productId, productsQuery.data, jobOrderQuery.data, isSoftware]);
+  }, [productId, productsQuery.data, jobOrderQuery.data]);
 
   // ── Upsert mutation ──
   const upsert = useMutation({
     mutationFn: async (status: JobOrderStatus) =>
       (
         await api.post<JobOrder>('/job-orders', {
-          type,
-          jobId: isSoftware ? jobId : undefined,
-          designJobId: !isSoftware ? jobId : undefined,
+          jobId,
           clientId,
-          productId: isSoftware ? productId : undefined,
+          productId,
           salePrice,
           discount,
           discountType,
@@ -413,7 +389,7 @@ export function JobOrderPage() {
         })
       ).data,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['job-order', jobId, type] });
+      queryClient.invalidateQueries({ queryKey: ['job-order', jobId] });
       queryClient.invalidateQueries({ queryKey: ['job-orders'] });
     },
   });
@@ -426,7 +402,7 @@ export function JobOrderPage() {
         clientCode: code,
         ownerName: details.ownerName || 'Admin staff',
         contactNo: details.contactNo || '—',
-        clientType: isSoftware ? 'SOFTWARE' : 'ADVERTISING',
+        clientType: 'SOFTWARE',
       })).data;
     },
     onSuccess: (newClient) => {
@@ -440,23 +416,6 @@ export function JobOrderPage() {
         email: '',
         address: '',
       });
-    },
-  });
-
-  const migrateClient = useMutation({
-    mutationFn: async (businessName: string) => {
-      const code = generateClientCode();
-      return (await api.post<Client>('/clients', {
-        businessName,
-        clientCode: code,
-        ownerName: 'Admin staff',
-        contactNo: '—',
-        clientType: isSoftware ? 'SOFTWARE' : 'ADVERTISING',
-      })).data;
-    },
-    onSuccess: (newClient) => {
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
-      setClientId(newClient.id);
     },
   });
 
@@ -514,14 +473,9 @@ export function JobOrderPage() {
   const jo = jobOrderQuery.data;
   const parent = jobQuery.data;
 
-  const canSave = !readOnly && !!clientId && (isSoftware ? !!productId : true);
+  const canSave = !!clientId && !!productId;
 
   const handlePrint = async () => {
-    if (readOnly) {
-      if (!jo) return;
-      window.print();
-      return;
-    }
     if (!canSave) return;
     // Save first so the print reflects the latest state
     await upsert.mutateAsync(jo?.status ?? 'DRAFT');
@@ -534,7 +488,7 @@ export function JobOrderPage() {
   const handleDownload = async () => {
     const element = document.getElementById('job-order-print');
     if (!element) return;
-    if (!readOnly && canSave) {
+    if (canSave) {
       await upsert.mutateAsync(jo?.status ?? 'DRAFT');
     }
     setIsDownloading(true);
@@ -563,8 +517,8 @@ export function JobOrderPage() {
   if (jobOrderQuery.isError) {
     return (
       <div style={{ padding: '2rem' }}>
-        <button type="button" className="btn btn-secondary" style={{ marginBottom: '1rem', fontSize: '0.8rem' }} onClick={() => navigate(isSoftware ? '/job-orders/software' : '/job-orders/design')}>
-          ← Back to {isSoftware ? 'Software JO' : 'Design JO'}
+        <button type="button" className="btn btn-secondary" style={{ marginBottom: '1rem', fontSize: '0.8rem' }} onClick={() => navigate('/job-orders/software')}>
+          ← Back to Software JO
         </button>
         <div className="card" style={{ borderColor: 'var(--danger)', maxWidth: 480 }}>
           <p style={{ color: 'var(--danger)', margin: '0 0 0.5rem' }}>
@@ -589,8 +543,8 @@ export function JobOrderPage() {
   if (jobQuery.isError) {
     return (
       <div style={{ padding: '2rem' }}>
-        <button type="button" className="btn btn-secondary" style={{ marginBottom: '1rem', fontSize: '0.8rem' }} onClick={() => navigate(isSoftware ? '/job-orders/software' : '/job-orders/design')}>
-          ← Back to {isSoftware ? 'Software JO' : 'Design JO'}
+        <button type="button" className="btn btn-secondary" style={{ marginBottom: '1rem', fontSize: '0.8rem' }} onClick={() => navigate('/job-orders/software')}>
+          ← Back to Software JO
         </button>
         <div className="card" style={{ borderColor: 'var(--danger)', maxWidth: 480 }}>
           <p style={{ color: 'var(--danger)', margin: '0 0 0.5rem' }}>
@@ -609,13 +563,11 @@ export function JobOrderPage() {
       {/* ── Print-only template ── */}
       <div id="job-order-print" style={{ display: 'none' }}>
         <PrintTemplate
-          type={type}
           docType={docType}
           jobId={jobId ?? ''}
           joNumber={jo?.id.slice(0, 8).toUpperCase() ?? 'NEW'}
           client={client}
           product={product}
-          parentTitle={!isSoftware ? (parent as DesignJob)?.title : undefined}
           salePrice={salePrice}
           discountAmt={discountAmt}
           softwareTotal={softwareTotal}
@@ -644,11 +596,11 @@ export function JobOrderPage() {
               type="button"
               className="btn btn-secondary"
               style={{ marginBottom: '0.75rem', fontSize: '0.8rem' }}
-              onClick={() => navigate(isSoftware ? '/job-orders/software' : '/job-orders/design')}
+              onClick={() => navigate('/job-orders/software')}
             >
-              ← Back to {isSoftware ? 'Software JO' : 'Design JO'}
+              ← Back to Software JO
             </button>
-            <h1 style={{ margin: 0 }}>{isSoftware ? 'Software JO' : 'Design JO'}</h1>
+            <h1 style={{ margin: 0 }}>Software JO</h1>
             <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
               {jo ? `JO-${jo.id.slice(0, 8).toUpperCase()} · ${jo.status}` : 'New job order'}
             </p>
@@ -665,30 +617,26 @@ export function JobOrderPage() {
                 <option key={d.value} value={d.value}>{d.label}</option>
               ))}
             </select>
-            {!readOnly && (
-              <>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  disabled={!canSave || upsert.isPending}
-                  onClick={() => upsert.mutate(jo?.status ?? 'DRAFT')}
-                >
-                  {upsert.isPending ? 'Saving…' : 'Save Draft'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={!canSave || upsert.isPending}
-                  onClick={() => upsert.mutate('FINALIZED')}
-                >
-                  Finalize
-                </button>
-              </>
-            )}
             <button
               type="button"
               className="btn btn-secondary"
-              disabled={readOnly ? !jo : !canSave}
+              disabled={!canSave || upsert.isPending}
+              onClick={() => upsert.mutate(jo?.status ?? 'DRAFT')}
+            >
+              {upsert.isPending ? 'Saving…' : 'Save Draft'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!canSave || upsert.isPending}
+              onClick={() => upsert.mutate('FINALIZED')}
+            >
+              Finalize
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={!canSave}
               onClick={handlePrint}
               style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
             >
@@ -697,7 +645,7 @@ export function JobOrderPage() {
             <button
               type="button"
               className="btn btn-secondary"
-              disabled={(readOnly ? !jo : !canSave) || isDownloading}
+              disabled={!canSave || isDownloading}
               onClick={handleDownload}
               style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
             >
@@ -709,20 +657,10 @@ export function JobOrderPage() {
         {/* Parent info banner */}
         {parent && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1rem', display: 'flex', gap: '2rem', fontSize: '0.85rem', flexWrap: 'wrap' }}>
-            {isSoftware ? (
-              <>
-                <span><span style={{ color: 'var(--text-muted)' }}>Job:</span> <strong>{(parent as Job).id.slice(0, 8).toUpperCase()}</strong></span>
-                <span><span style={{ color: 'var(--text-muted)' }}>Client:</span> <strong>{(parent as Job).client?.businessName ?? (parent as Job).clientId}</strong></span>
-                <span><span style={{ color: 'var(--text-muted)' }}>Scheduled:</span> <strong>{new Date((parent as Job).scheduleDate).toLocaleDateString()}</strong></span>
-              </>
-            ) : (
-              <>
-                <span><span style={{ color: 'var(--text-muted)' }}>Design Job:</span> <strong>{(parent as DesignJob).title}</strong></span>
-                <span><span style={{ color: 'var(--text-muted)' }}>Client Ref:</span> <strong>{(parent as DesignJob).clientName ?? '—'}</strong></span>
-                <span><span style={{ color: 'var(--text-muted)' }}>Designer:</span> <strong>{(parent as DesignJob).designer?.fullName}</strong></span>
-              </>
-            )}
-            <span><span style={{ color: 'var(--text-muted)' }}>Status:</span> <strong>{(parent as any).jobStatus?.replace('_', ' ') || (parent as any).status}</strong></span>
+            <span><span style={{ color: 'var(--text-muted)' }}>Job:</span> <strong>{parent.id.slice(0, 8).toUpperCase()}</strong></span>
+            <span><span style={{ color: 'var(--text-muted)' }}>Client:</span> <strong>{parent.client?.businessName ?? parent.clientId}</strong></span>
+            <span><span style={{ color: 'var(--text-muted)' }}>Scheduled:</span> <strong>{new Date(parent.scheduleDate).toLocaleDateString()}</strong></span>
+            <span><span style={{ color: 'var(--text-muted)' }}>Status:</span> <strong>{parent.jobStatus?.replace('_', ' ')}</strong></span>
           </div>
         )}
 
@@ -732,10 +670,10 @@ export function JobOrderPage() {
           </p>
         )}
 
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'minmax(0, 1fr) 340px', 
-          gap: '1.5rem', 
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) 340px',
+          gap: '1.5rem',
           alignItems: 'start'
         }}>
           {/* ── Left column ── */}
@@ -743,7 +681,7 @@ export function JobOrderPage() {
 
             {/* Client & System */}
             <section className="card">
-              <h2 style={{ marginTop: 0, fontSize: '1rem' }}>{isSoftware ? 'Client & System' : 'Client & Fee'}</h2>
+              <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Client & System</h2>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1rem' }}>
                 <div className="field">
                   <label>Client</label>
@@ -751,51 +689,31 @@ export function JobOrderPage() {
                     value={clientId}
                     onChange={setClientId}
                     clients={clientsQuery.data ?? []}
-                    disabled={readOnly}
-                    onQuickAdd={(name) => migrateClient.mutate(name)}
+                    onQuickAdd={(name) => createClient.mutate({ businessName: name, ownerName: '', contactNo: '', email: '', address: '' })}
                     onFullDetails={() => setShowNewClient(true)}
-                    isAdding={migrateClient.isPending}
+                    isAdding={createClient.isPending}
                   />
-                  {!readOnly && !isSoftware && !clientId && (parent as DesignJob)?.clientName && (
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      style={{ marginTop: '0.5rem', fontSize: '0.75rem', padding: '0.25rem 0.5rem', borderStyle: 'dashed' }}
-                      disabled={migrateClient.isPending}
-                      onClick={() => migrateClient.mutate((parent as DesignJob).clientName!)}
-                    >
-                      {migrateClient.isPending ? 'Adding…' : `⚡ Use "${(parent as DesignJob).clientName}" from design job`}
-                    </button>
-                  )}
                 </div>
-                {isSoftware ? (
-                  <div className="field">
-                    <label htmlFor="jo-product">System / Software</label>
-                    <select id="jo-product" required disabled={readOnly} value={productId} onChange={(e) => setProductId(e.target.value)}>
-                      <option value="">Select product…</option>
-                      {productsQuery.data?.map((p) => (
-                        <option key={p.id} value={p.id}>{p.productName} v{p.version}</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="field">
-                    <label>Job Category</label>
-                    <input value="Design / Advertising" disabled style={{ background: 'var(--bg-muted)' }} />
-                  </div>
-                )}
                 <div className="field">
-                  <label htmlFor="jo-sale-price">{isSoftware ? 'Sale Price (₱)' : 'Design Fee (₱)'}</label>
+                  <label htmlFor="jo-product">System / Software</label>
+                  <select id="jo-product" required value={productId} onChange={(e) => setProductId(e.target.value)}>
+                    <option value="">Select product…</option>
+                    {productsQuery.data?.map((p) => (
+                      <option key={p.id} value={p.id}>{p.productName} v{p.version}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="jo-sale-price">Sale Price (₱)</label>
                   <input
                     id="jo-sale-price"
                     type="number"
                     min={0}
                     step="0.01"
-                    disabled={readOnly}
                     value={salePrice}
                     onChange={(e) => setSalePrice(Number(e.target.value))}
                   />
-                  {isSoftware && product && (
+                  {product && (
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       List price: ₱{Number(product.price).toLocaleString()}
                     </span>
@@ -809,14 +727,12 @@ export function JobOrderPage() {
                       min={0}
                       step="0.01"
                       style={{ flex: 1 }}
-                      disabled={readOnly}
                       value={discount}
                       onChange={(e) => setDiscount(Number(e.target.value))}
                     />
                     <select
                       value={discountType}
                       style={{ width: 80 }}
-                      disabled={readOnly}
                       onChange={(e) => setDiscountType(e.target.value as DiscountType)}
                     >
                       <option value="FIXED">₱</option>
@@ -830,7 +746,6 @@ export function JobOrderPage() {
                 <textarea
                   id="jo-remarks"
                   rows={2}
-                  disabled={readOnly}
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
                   placeholder="Delivery instructions, special requests…"
@@ -843,51 +758,49 @@ export function JobOrderPage() {
               <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Materials / Package</h2>
 
               {/* Preset quick-add buttons (from Inventory) + barcode scan */}
-              {!readOnly && (
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>
-                    Quick Add
-                  </div>
-
-                  {/* Barcode scan-to-add */}
-                  <form onSubmit={handleScan} style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem', maxWidth: 340 }}>
-                    <input
-                      value={scanCode}
-                      onChange={(e) => { setScanCode(e.target.value); setScanError(''); }}
-                      placeholder="Scan or type barcode, then Enter"
-                      style={{ flex: 1, fontSize: '0.82rem' }}
-                    />
-                    <button type="submit" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }}>
-                      Add
-                    </button>
-                  </form>
-                  {scanError && <p className="error-text" style={{ marginTop: 0 }}>{scanError}</p>}
-
-                  {inventoryQuery.isLoading && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Loading items…</p>}
-                  {inventoryQuery.data?.length === 0 && (
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      No inventory items yet. Add them under Settings → Inventory Management.
-                    </p>
-                  )}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                    {inventoryQuery.data?.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem' }}
-                        title={item.description ?? undefined}
-                        onClick={() => addInventoryItem(item)}
-                      >
-                        + {item.name}
-                        <span style={{ color: item.lowStockAlert > 0 && item.stockQty <= item.lowStockAlert ? 'var(--danger)' : 'var(--text-muted)', marginLeft: '0.35rem' }}>
-                          ({item.stockQty})
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>
+                  Quick Add
                 </div>
-              )}
+
+                {/* Barcode scan-to-add */}
+                <form onSubmit={handleScan} style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem', maxWidth: 340 }}>
+                  <input
+                    value={scanCode}
+                    onChange={(e) => { setScanCode(e.target.value); setScanError(''); }}
+                    placeholder="Scan or type barcode, then Enter"
+                    style={{ flex: 1, fontSize: '0.82rem' }}
+                  />
+                  <button type="submit" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }}>
+                    Add
+                  </button>
+                </form>
+                {scanError && <p className="error-text" style={{ marginTop: 0 }}>{scanError}</p>}
+
+                {inventoryQuery.isLoading && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Loading items…</p>}
+                {inventoryQuery.data?.length === 0 && (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    No inventory items yet. Add them under Settings → Inventory Management.
+                  </p>
+                )}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {inventoryQuery.data?.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem' }}
+                      title={item.description ?? undefined}
+                      onClick={() => addInventoryItem(item)}
+                    >
+                      + {item.name}
+                      <span style={{ color: item.lowStockAlert > 0 && item.stockQty <= item.lowStockAlert ? 'var(--danger)' : 'var(--text-muted)', marginLeft: '0.35rem' }}>
+                        ({item.stockQty})
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {/* Items table */}
               {items.length > 0 && (
@@ -908,7 +821,6 @@ export function JobOrderPage() {
                         <td>
                           <input
                             value={item.name}
-                            disabled={readOnly}
                             style={{ width: '100%', border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', fontSize: '0.9rem' }}
                             onChange={(e) => updateItem(item._key, { name: e.target.value })}
                           />
@@ -916,7 +828,6 @@ export function JobOrderPage() {
                         <td>
                           <input
                             value={item.description}
-                            disabled={readOnly}
                             style={{ width: '100%', border: 'none', background: 'transparent', color: 'var(--text-muted)', fontFamily: 'inherit', fontSize: '0.85rem' }}
                             onChange={(e) => updateItem(item._key, { description: e.target.value })}
                           />
@@ -926,7 +837,6 @@ export function JobOrderPage() {
                             type="number"
                             min={1}
                             value={item.quantity}
-                            disabled={readOnly}
                             style={{ width: '100%', border: 'none', background: 'transparent', color: 'var(--text)', textAlign: 'center', fontFamily: 'inherit', fontSize: '0.9rem' }}
                             onChange={(e) => updateItem(item._key, { quantity: Number(e.target.value) || 1 })}
                           />
@@ -937,7 +847,6 @@ export function JobOrderPage() {
                             min={0}
                             step="0.01"
                             value={item.unitPrice}
-                            disabled={readOnly}
                             style={{ width: '100%', border: 'none', background: 'transparent', color: 'var(--text)', textAlign: 'right', fontFamily: 'inherit', fontSize: '0.9rem' }}
                             onChange={(e) => updateItem(item._key, { unitPrice: Number(e.target.value) })}
                           />
@@ -946,16 +855,14 @@ export function JobOrderPage() {
                           ₱{(item.quantity * item.unitPrice).toLocaleString()}
                         </td>
                         <td>
-                          {!readOnly && (
-                            <button
-                              type="button"
-                              onClick={() => removeItem(item._key)}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: '1rem', padding: '0.2rem' }}
-                              title="Remove"
-                            >
-                              ×
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeItem(item._key)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: '1rem', padding: '0.2rem' }}
+                            title="Remove"
+                          >
+                            ×
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -965,11 +872,11 @@ export function JobOrderPage() {
 
               {items.length === 0 && (
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                  {readOnly ? 'No materials added yet.' : 'No materials added yet. Use the Quick Add buttons above or add a custom item below.'}
+                  No materials added yet. Use the Quick Add buttons above or add a custom item below.
                 </p>
               )}
 
-              {!readOnly && !showCustomForm && (
+              {!showCustomForm && (
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -1219,13 +1126,12 @@ interface PrintTemplateProps {
 }
 
 function PrintTemplate({
-  type, docType, jobId, joNumber, client, product, parentTitle,
+  docType, jobId, joNumber, client, product,
   salePrice, discountAmt, softwareTotal, materialsTotal, grandTotal,
   items, remarks, status, createdAt, companyName, companyLogoUrl,
   companyAddress, companyPhone, companyEmail, companyWebsite, companyTin,
-}: PrintTemplateProps & { type: string, parentTitle?: string }) {
+}: PrintTemplateProps) {
   const p = (n: number) => `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const isSoftware = type === 'SOFTWARE';
   const meta = DOC_META[docType];
   const isReceipt = docType === 'RECEIPT';
   const totalLabel = isReceipt ? 'AMOUNT PAID' : 'GRAND TOTAL';
@@ -1244,7 +1150,7 @@ function PrintTemplate({
           )}
           <div style={{ lineHeight: 1.35 }}>
             <div style={{ fontSize: '15pt', fontWeight: 'bold' }}>
-              {companyName ?? (isSoftware ? 'SOFTWARE DEPLOYMENT & LICENSE MANAGEMENT' : 'DESIGN & ADVERTISING SERVICES')}
+              {companyName ?? 'SOFTWARE DEPLOYMENT & LICENSE MANAGEMENT'}
             </div>
             {companyAddress && <div style={{ fontSize: '8.5pt', color: '#333' }}>{companyAddress}</div>}
             {(companyPhone || companyEmail) && (
@@ -1258,7 +1164,7 @@ function PrintTemplate({
         </div>
         <div style={{ textAlign: 'right', minWidth: '150pt', flexShrink: 0 }}>
           <div style={{ fontSize: '13pt', fontWeight: 'bold' }}>{meta.label} — {meta.filePrefix}-{joNumber}</div>
-          <div style={{ fontSize: '8.5pt', color: '#555', marginTop: '4pt' }}>{isSoftware ? 'Job ID' : 'Design ID'}: {jobId.slice(0, 8).toUpperCase()}</div>
+          <div style={{ fontSize: '8.5pt', color: '#555', marginTop: '4pt' }}>Job ID: {jobId.slice(0, 8).toUpperCase()}</div>
           <div style={{ fontSize: '8.5pt', color: '#555' }}>Status: {status}</div>
           <div style={{ fontSize: '8.5pt', color: '#555' }}>Date: {createdAt ? new Date(createdAt).toLocaleDateString() : new Date().toLocaleDateString()}</div>
           <div style={{ fontSize: '8.5pt', color: '#555' }}>Printed: {new Date().toLocaleString()}</div>
@@ -1277,9 +1183,9 @@ function PrintTemplate({
         </div>
       </div>
 
-      {/* Software / Design Main Item */}
+      {/* Software Main Item */}
       <div style={{ border: '1px solid #ccc', borderRadius: '4pt', padding: '10pt', marginBottom: '16pt' }}>
-        <strong>{isSoftware ? 'System / Software' : 'Design / Advertising Service'}</strong>
+        <strong>System / Software</strong>
         <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '8pt', fontSize: '11pt' }}>
           <thead>
             <tr style={{ background: '#f0f0f0' }}>
@@ -1293,10 +1199,10 @@ function PrintTemplate({
           <tbody>
             <tr>
               <td style={{ border: '1px solid #ccc', padding: '6pt' }}>
-                {isSoftware ? (product?.productName ?? '—') : (parentTitle ?? 'Design Service')}
+                {product?.productName ?? '—'}
               </td>
               <td style={{ border: '1px solid #ccc', padding: '6pt' }}>
-                {isSoftware ? (`v${product?.version ?? '—'}`) : 'Custom Project'}
+                v{product?.version ?? '—'}
               </td>
               <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>{p(salePrice)}</td>
               <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', color: '#16a34a' }}>{discountAmt > 0 ? `−${p(discountAmt)}` : '—'}</td>

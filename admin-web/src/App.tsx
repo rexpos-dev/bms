@@ -54,7 +54,7 @@ function App() {
           path="/job-orders/software"
           element={
             <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'LIAISON', 'SALES_STAFF']}>
-              <JobOrdersPage type="SOFTWARE" />
+              <JobOrdersPage />
             </RequireAuth>
           }
         />

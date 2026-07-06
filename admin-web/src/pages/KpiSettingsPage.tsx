@@ -3,13 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import type { KpiDefinitionRow, UserRole } from '../lib/types';
 
-const KPI_ROLES: UserRole[] = ['INSTALLER', 'DEVELOPER', 'DESIGNER', 'MACHINE_OPERATOR', 'LIAISON', 'SALES_STAFF', 'ADMIN_STAFF'];
+const KPI_ROLES: UserRole[] = ['INSTALLER', 'DEVELOPER', 'DESIGNER', 'LIAISON', 'SALES_STAFF', 'ADMIN_STAFF'];
 
 const ROLE_LABEL: Record<string, string> = {
   INSTALLER: 'Installer',
   DEVELOPER: 'Developer',
   DESIGNER: 'Designer',
-  MACHINE_OPERATOR: 'Machine Operator',
   LIAISON: 'Liaison',
   SALES_STAFF: 'Sales Staff',
   ADMIN_STAFF: 'Admin Staff',

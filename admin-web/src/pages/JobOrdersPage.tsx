@@ -2,28 +2,18 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
-import { useAuthStore } from '../lib/auth-store';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
-import type { Job, JobOrder, DesignJob, JobOrderType } from '../lib/types';
+import type { Job, JobOrder } from '../lib/types';
 
-interface JobOrdersPageProps {
-  type: JobOrderType;
-}
-
-export function JobOrdersPage({ type }: JobOrdersPageProps) {
+export function JobOrdersPage() {
   const navigate = useNavigate();
-  const user = useAuthStore((s) => s.user);
-  const readOnly = user?.role === 'MACHINE_OPERATOR';
   const [showCreate, setShowCreate] = useState(false);
 
-  const isSoftware = type === 'SOFTWARE';
-  const pageTitle = isSoftware ? 'Software JO' : 'Design JO';
-
   const jobOrdersQuery = useQuery({
-    queryKey: ['job-orders', type],
-    queryFn: async () => (await api.get<JobOrder[]>('/job-orders', { params: { type } })).data,
+    queryKey: ['job-orders'],
+    queryFn: async () => (await api.get<JobOrder[]>('/job-orders')).data,
   });
 
   const pg = usePagination(jobOrdersQuery.data ?? []);
@@ -36,142 +26,81 @@ export function JobOrdersPage({ type }: JobOrdersPageProps) {
       const jobsWithOrders = new Set(orders.map(o => o.jobId));
       return allJobs.filter(j => !jobsWithOrders.has(j.id));
     },
-    enabled: showCreate && isSoftware && jobOrdersQuery.isSuccess,
-  });
-
-  const designJobsQuery = useQuery({
-    queryKey: ['design-jobs', 'without-orders'],
-    queryFn: async () => {
-      const allDesignJobs = (await api.get<DesignJob[]>('/design-jobs')).data;
-      const orders = jobOrdersQuery.data ?? [];
-      const jobsWithOrders = new Set(orders.map(o => o.designJobId));
-      return allDesignJobs.filter(j => !jobsWithOrders.has(j.id));
-    },
-    enabled: showCreate && !isSoftware && jobOrdersQuery.isSuccess,
+    enabled: showCreate && jobOrdersQuery.isSuccess,
   });
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ marginBottom: '0.25rem' }}>{pageTitle}</h1>
+          <h1 style={{ marginBottom: '0.25rem' }}>Software JO</h1>
           <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
-            {isSoftware 
-              ? 'List of all software deployment and hardware package job orders.' 
-              : 'List of all advertising and design job orders.'}
+            List of all software deployment and hardware package job orders.
           </p>
         </div>
-        {!readOnly && (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setShowCreate(true)}
-          >
-            Create {isSoftware ? 'Software' : 'Design'} JO
-          </button>
-        )}
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => setShowCreate(true)}
+        >
+          Create Software JO
+        </button>
       </div>
 
       <Dialog
         isOpen={showCreate}
         onClose={() => setShowCreate(false)}
-        title={isSoftware ? "Select Installation Job" : "Select Design Job"}
+        title="Select Installation Job"
         maxWidth={640}
       >
         <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
-          Choose {isSoftware ? 'an installation' : 'a design job'} that doesn't have a job order yet to start creating one.
+          Choose an installation that doesn't have a job order yet to start creating one.
         </p>
-        
-        {isSoftware ? (
-          <>
-            {jobsQuery.isLoading && <p>Loading available jobs…</p>}
-            {jobsQuery.data && jobsQuery.data.length === 0 && (
-              <div style={{ padding: '2rem', textAlign: 'center', background: 'var(--bg)', borderRadius: 8 }}>
-                <p style={{ color: 'var(--text-muted)', margin: 0 }}>No pending installations available for new orders.</p>
-              </div>
-            )}
-            {jobsQuery.data && jobsQuery.data.length > 0 && (
-              <div style={{ maxHeight: 400, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
-                <table style={{ margin: 0 }}>
-                  <thead>
-                    <tr>
-                      <th>Client</th>
-                      <th>Schedule</th>
-                      <th>Status</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {jobsQuery.data.map(job => (
-                      <tr key={job.id}>
-                        <td style={{ fontSize: '0.85rem' }}>
-                          <strong>{job.client?.businessName}</strong>
-                        </td>
-                        <td style={{ fontSize: '0.85rem' }}>
-                          {new Date(job.scheduleDate).toLocaleDateString()}
-                        </td>
-                        <td>
-                          <StatusBadge status={job.jobStatus} />
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }}
-                            onClick={() => navigate(`/job-orders/${job.id}?type=SOFTWARE`)}
-                          >
-                            Create JO
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            {designJobsQuery.isLoading && <p>Loading available design jobs…</p>}
-            {designJobsQuery.data && designJobsQuery.data.length === 0 && (
-              <div style={{ padding: '2rem', textAlign: 'center', background: 'var(--bg)', borderRadius: 8 }}>
-                <p style={{ color: 'var(--text-muted)', margin: 0 }}>No design jobs available for new orders.</p>
-              </div>
-            )}
-            {designJobsQuery.data && designJobsQuery.data.length > 0 && (
-              <div style={{ maxHeight: 400, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
-                <table style={{ margin: 0 }}>
-                  <thead>
-                    <tr>
-                      <th>Title</th>
-                      <th>Client</th>
-                      <th>Status</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {designJobsQuery.data.map(job => (
-                      <tr key={job.id}>
-                        <td style={{ fontSize: '0.85rem' }}><strong>{job.title}</strong></td>
-                        <td style={{ fontSize: '0.85rem' }}>{job.clientName ?? '—'}</td>
-                        <td><StatusBadge status={job.status.toLowerCase()} /></td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }}
-                            onClick={() => navigate(`/job-orders/${job.id}?type=DESIGN`)}
-                          >
-                            Create JO
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
+
+        {jobsQuery.isLoading && <p>Loading available jobs…</p>}
+        {jobsQuery.data && jobsQuery.data.length === 0 && (
+          <div style={{ padding: '2rem', textAlign: 'center', background: 'var(--bg)', borderRadius: 8 }}>
+            <p style={{ color: 'var(--text-muted)', margin: 0 }}>No pending installations available for new orders.</p>
+          </div>
+        )}
+        {jobsQuery.data && jobsQuery.data.length > 0 && (
+          <div style={{ maxHeight: 400, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+            <table style={{ margin: 0 }}>
+              <thead>
+                <tr>
+                  <th>Client</th>
+                  <th>Schedule</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {jobsQuery.data.map(job => (
+                  <tr key={job.id}>
+                    <td style={{ fontSize: '0.85rem' }}>
+                      <strong>{job.client?.businessName}</strong>
+                    </td>
+                    <td style={{ fontSize: '0.85rem' }}>
+                      {new Date(job.scheduleDate).toLocaleDateString()}
+                    </td>
+                    <td>
+                      <StatusBadge status={job.jobStatus} />
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }}
+                        onClick={() => navigate(`/job-orders/${job.id}`)}
+                      >
+                        Create JO
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
           <button type="button" className="btn btn-secondary" onClick={() => setShowCreate(false)}>
@@ -191,8 +120,7 @@ export function JobOrdersPage({ type }: JobOrdersPageProps) {
               <tr>
                 <th>JO No.</th>
                 <th>Client</th>
-                {isSoftware && <th>Product</th>}
-                {!isSoftware && <th>Design Job</th>}
+                <th>Product</th>
                 <th>Sale Price</th>
                 <th>Total</th>
                 <th>Status</th>
@@ -203,8 +131,8 @@ export function JobOrdersPage({ type }: JobOrdersPageProps) {
             <tbody>
               {pg.paginated.map((jo) => {
                 const materialsTotal = (jo.items || []).reduce((s, i) => s + i.quantity * Number(i.unitPrice), 0);
-                const discountAmt = jo.discountType === 'PERCENTAGE' 
-                  ? (Number(jo.salePrice) * Number(jo.discount)) / 100 
+                const discountAmt = jo.discountType === 'PERCENTAGE'
+                  ? (Number(jo.salePrice) * Number(jo.discount)) / 100
                   : Number(jo.discount);
                 const grandTotal = Number(jo.salePrice) - discountAmt + materialsTotal;
 
@@ -214,8 +142,7 @@ export function JobOrdersPage({ type }: JobOrdersPageProps) {
                       JO-{jo.id.slice(0, 8).toUpperCase()}
                     </td>
                     <td style={{ fontWeight: 500 }}>{jo.client?.businessName ?? jo.clientId}</td>
-                    {isSoftware && <td>{jo.product?.productName ?? jo.productId}</td>}
-                    {!isSoftware && <td>{jo.designJob?.title ?? '—'}</td>}
+                    <td>{jo.product?.productName ?? jo.productId}</td>
                     <td>₱{Number(jo.salePrice).toLocaleString()}</td>
                     <td style={{ fontWeight: 600 }}>₱{grandTotal.toLocaleString()}</td>
                     <td>
@@ -229,9 +156,9 @@ export function JobOrdersPage({ type }: JobOrdersPageProps) {
                         type="button"
                         className="btn btn-secondary"
                         style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
-                        onClick={() => navigate(`/job-orders/${jo.jobId || jo.designJobId}?type=${jo.type}`)}
+                        onClick={() => navigate(`/job-orders/${jo.jobId}`)}
                       >
-                        {readOnly ? 'View' : 'View / Edit'}
+                        View / Edit
                       </button>
                     </td>
                   </tr>

@@ -8,7 +8,7 @@ import type { TeamMember, UserRole } from '../lib/types';
 
 const ALL_ROLES: UserRole[] = [
   'SUPER_ADMIN', 'ADMIN_STAFF', 'SALES_STAFF', 'INSTALLER', 'DEVELOPER',
-  'DESIGNER', 'MACHINE_OPERATOR', 'LIAISON',
+  'DESIGNER', 'LIAISON',
 ];
 
 const ROLE_LABEL: Record<UserRole, string> = {
@@ -18,7 +18,6 @@ const ROLE_LABEL: Record<UserRole, string> = {
   INSTALLER:        'Installer',
   DEVELOPER:        'Developer',
   DESIGNER:         'Designer',
-  MACHINE_OPERATOR: 'Operator',
   LIAISON:          'Liaison',
 };
 
@@ -29,7 +28,6 @@ const ROLE_COLOR: Record<UserRole, string> = {
   INSTALLER:        '#0891b2',
   DEVELOPER:        '#16a34a',
   DESIGNER:         '#d97706',
-  MACHINE_OPERATOR: '#b45309',
   LIAISON:          '#db2777',
 };
 

@@ -9,7 +9,7 @@ import { Calendar } from '../components/Calendar';
 import { Dialog } from '../components/Dialog';
 import { StatusBadge } from '../components/StatusBadge';
 import { Stagger, MotionItem, AnimatedNumber } from '../lib/motion';
-import type { AuthenticatedUser, Client, DesignJob, DevProject, Earning, FinancialSummary, Job, JobOrder, KpiDashboard, License, UserRole, Withdrawal } from '../lib/types';
+import type { AuthenticatedUser, Client, DevProject, Earning, FinancialSummary, Job, JobOrder, KpiDashboard, License, UserRole, Withdrawal } from '../lib/types';
 
 function useList<T>(key: string, url: string) {
   return useQuery({
@@ -454,34 +454,6 @@ function DesignerDashboard() {
   );
 }
 
-// ── Machine Operator Dashboard ────────────────────────────────────────────────
-
-function MachineOperatorDashboard() {
-  const earnings = useList<Earning>('dashboard-my-earnings', '/earnings');
-  const withdrawals = useList<Withdrawal>('dashboard-my-withdrawals', '/withdrawals');
-
-  const pendingEarnings = earnings.data?.filter((e) => e.status === 'PENDING').length ?? 0;
-  const approvedEarnings = earnings.data?.filter((e) => e.status === 'APPROVED').length ?? 0;
-  const pendingWithdrawals = withdrawals.data?.filter((w) => w.status === 'PENDING').length ?? 0;
-
-  return (
-    <>
-      <CardGrid
-        cards={[
-          { label: 'Pending Earnings', value: pendingEarnings, total: earnings.data?.length ?? 0 },
-          { label: 'Approved Earnings', value: approvedEarnings, total: earnings.data?.length ?? 0 },
-          { label: 'Pending Withdrawals', value: pendingWithdrawals, total: withdrawals.data?.length ?? 0 },
-        ]}
-      />
-      <KpiWidget />
-      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '1.5rem' }}>
-        Head to <strong>Operations</strong> to manage your assigned tasks and to <strong>Withdrawals</strong> to request a payout.
-        Your KPI metrics are entered by your manager each month.
-      </p>
-    </>
-  );
-}
-
 // ── Liaison Dashboard ─────────────────────────────────────────────────────────
 
 function LiaisonDashboard() {
@@ -548,8 +520,7 @@ function SalesStaffDashboard() {
   const navigate = useNavigate();
 
   const clients    = useList<Client>('dashboard-clients', '/clients');
-  const softwareJOs = useList<JobOrder>('dashboard-jo-software', '/job-orders?type=SOFTWARE');
-  const designJOs   = useList<JobOrder>('dashboard-jo-design', '/job-orders?type=DESIGN');
+  const softwareJOs = useList<JobOrder>('dashboard-jo-software', '/job-orders');
   const earnings   = useList<Earning>('dashboard-my-earnings', '/earnings');
   const balanceQuery = useQuery({
     queryKey: ['dashboard-balance'],
@@ -557,7 +528,7 @@ function SalesStaffDashboard() {
   });
 
   /* ── Derived stats ── */
-  const allJOs = [...(softwareJOs.data ?? []), ...(designJOs.data ?? [])];
+  const allJOs = softwareJOs.data ?? [];
 
   const activeClients  = clients.data?.filter((c) => c.status === 'ACTIVE').length ?? 0;
   const totalClients   = clients.data?.length ?? 0;
@@ -604,7 +575,7 @@ function SalesStaffDashboard() {
           {
             label: 'Total Job Orders',
             value: allJOs.length,
-            subtext: `${softwareJOs.data?.length ?? 0} Software · ${designJOs.data?.length ?? 0} Design`,
+            subtext: `${softwareJOs.data?.length ?? 0} Software`,
           },
           {
             label: 'Sales Pipeline',
@@ -667,14 +638,6 @@ function SalesStaffDashboard() {
             >
               Software JOs
             </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
-              onClick={() => navigate('/job-orders/design')}
-            >
-              Design JOs
-            </button>
           </div>
         </div>
 
@@ -688,7 +651,6 @@ function SalesStaffDashboard() {
               <thead>
                 <tr>
                   <th>Client</th>
-                  <th>Type</th>
                   <th>Sale Price</th>
                   <th>Status</th>
                   <th>Date</th>
@@ -700,29 +662,10 @@ function SalesStaffDashboard() {
                     key={jo.id}
                     style={{ cursor: 'pointer' }}
                     onClick={() => {
-                      const parentId = jo.jobId ?? jo.designJobId;
-                      if (parentId) navigate(`/job-orders/${parentId}`);
+                      if (jo.jobId) navigate(`/job-orders/${jo.jobId}`);
                     }}
                   >
                     <td style={{ fontWeight: 600 }}>{jo.client?.businessName ?? '—'}</td>
-                    <td>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          padding: '0.18rem 0.55rem',
-                          borderRadius: 999,
-                          fontSize: '0.68rem',
-                          fontWeight: 700,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.06em',
-                          background: jo.type === 'SOFTWARE' ? 'var(--accent-light)' : 'var(--info-light)',
-                          color: jo.type === 'SOFTWARE' ? 'var(--accent)' : 'var(--info)',
-                          border: `1px solid ${jo.type === 'SOFTWARE' ? 'var(--accent-glow)' : 'var(--info-glow)'}`,
-                        }}
-                      >
-                        {jo.type}
-                      </span>
-                    </td>
                     <td style={{ fontWeight: 600 }}>₱{Number(jo.salePrice).toLocaleString()}</td>
                     <td>
                       <StatusBadge status={jo.status} />
@@ -768,7 +711,6 @@ function QuickActions() {
   const qc = useQueryClient();
 
   const [showClient, setShowClient] = useState(false);
-  const [showJO, setShowJO] = useState(false);
   const [clientForm, setClientForm] = useState({ ...EMPTY_CLIENT_FORM, clientCode: generateClientCode() });
 
   const createClient = useMutation({
@@ -796,7 +738,7 @@ function QuickActions() {
           type="button"
           className="btn btn-secondary"
           style={{ fontSize: '0.875rem' }}
-          onClick={() => setShowJO(true)}
+          onClick={() => navigate('/job-orders/software')}
         >
           + Create Job Order
         </button>
@@ -874,40 +816,6 @@ function QuickActions() {
           </div>
         </form>
       </Dialog>
-
-      {/* Job Order type picker dialog */}
-      <Dialog isOpen={showJO} onClose={() => setShowJO(false)} title="Create Job Order" maxWidth={380}>
-        <p style={{ color: 'var(--text-muted)', marginTop: 0, fontSize: '0.9rem' }}>
-          Choose the type of job order to create.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{ justifyContent: 'flex-start', padding: '0.85rem 1.25rem', textAlign: 'left', alignItems: 'flex-start', whiteSpace: 'normal' }}
-            onClick={() => { setShowJO(false); navigate('/job-orders/software'); }}
-          >
-            <div>
-              <div style={{ fontWeight: 700 }}>Software Job Order</div>
-              <div style={{ fontSize: '0.8rem', opacity: 0.85, marginTop: '0.25rem', lineHeight: 1.5 }}>POS, accounting, inventory, and other software deployments</div>
-            </div>
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            style={{ justifyContent: 'flex-start', padding: '0.85rem 1.25rem', textAlign: 'left', alignItems: 'flex-start', whiteSpace: 'normal' }}
-            onClick={() => { setShowJO(false); navigate('/job-orders/design'); }}
-          >
-            <div>
-              <div style={{ fontWeight: 700 }}>Design Job Order</div>
-              <div style={{ fontSize: '0.8rem', opacity: 0.85, marginTop: '0.25rem', lineHeight: 1.5 }}>Tarpaulins, banners, advertising, and design projects</div>
-            </div>
-          </button>
-        </div>
-        <div style={{ marginTop: '1rem', textAlign: 'right' }}>
-          <button type="button" className="btn btn-secondary" onClick={() => setShowJO(false)}>Cancel</button>
-        </div>
-      </Dialog>
     </>
   );
 }
@@ -919,7 +827,6 @@ const ROLE_LABEL: Record<UserRole, string> = {
   INSTALLER: 'Installer',
   DEVELOPER: 'Developer',
   DESIGNER: 'Designer',
-  MACHINE_OPERATOR: 'Machine Operator',
   LIAISON: 'Liaison',
   ADMIN_STAFF: 'Admin Staff',
   SALES_STAFF: 'Sales Staff',
@@ -929,7 +836,6 @@ function RoleTaskCard({ role, userId }: { role: UserRole; userId: string }) {
   const jobs     = useQuery({ queryKey: ['role-tasks-jobs', userId], queryFn: async () => (await api.get<Job[]>('/jobs')).data, enabled: role === 'INSTALLER' });
   const licenses = useQuery({ queryKey: ['role-tasks-licenses', userId], queryFn: async () => (await api.get<License[]>('/licenses')).data, enabled: role === 'DEVELOPER' });
   const devProjs = useQuery({ queryKey: ['role-tasks-dev', userId], queryFn: async () => (await api.get<DevProject[]>('/dev-projects')).data, enabled: role === 'DEVELOPER' });
-  const designJs = useQuery({ queryKey: ['role-tasks-design', userId], queryFn: async () => (await api.get<DesignJob[]>('/design-jobs')).data, enabled: role === 'DESIGNER' || role === 'MACHINE_OPERATOR' });
 
   type Stat = { label: string; value: number; color?: string; to?: string };
   const stats: Stat[] = [];
@@ -948,22 +854,11 @@ function RoleTaskCard({ role, userId }: { role: UserRole; userId: string }) {
     stats.push({ label: 'Pending activations', value: pendingLic, color: 'var(--warning)', to: '/licenses' });
     stats.push({ label: 'Active projects', value: activeProj, color: 'var(--info)', to: '/dev-projects' });
     link = '/dev-projects';
-  } else if (role === 'DESIGNER') {
-    const data = designJs.data ?? [];
-    const myJobs = data.filter(j => j.designerId === userId);
-    const active = myJobs.filter(j => j.status === 'PENDING' || j.status === 'ASSIGNED' || j.status === 'ON_GOING').length;
-    stats.push({ label: 'Active design jobs', value: active, color: 'var(--info)', to: '/design-jobs' });
-    link = '/design-jobs';
-  } else if (role === 'MACHINE_OPERATOR') {
-    const data = designJs.data ?? [];
-    const myOps = data.filter(j => j.operatorId === userId && (j.status === 'ASSIGNED' || j.status === 'ON_GOING'));
-    stats.push({ label: 'Assigned operations', value: myOps.length, color: 'var(--info)', to: '/design-jobs' });
-    link = '/design-jobs';
   }
 
   if (stats.length === 0) return null;
 
-  const isLoading = jobs.isLoading || licenses.isLoading || devProjs.isLoading || designJs.isLoading;
+  const isLoading = jobs.isLoading || licenses.isLoading || devProjs.isLoading;
 
   return (
     <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
@@ -989,7 +884,7 @@ function RoleTaskCard({ role, userId }: { role: UserRole; userId: string }) {
 
 function AdditionalRoleTasks({ user }: { user: AuthenticatedUser }) {
   const additionalRoles = (user.roles ?? []).filter(r => r !== user.role);
-  const SUPPORTED: UserRole[] = ['INSTALLER', 'DEVELOPER', 'DESIGNER', 'MACHINE_OPERATOR'];
+  const SUPPORTED: UserRole[] = ['INSTALLER', 'DEVELOPER', 'DESIGNER'];
   const toShow = additionalRoles.filter(r => SUPPORTED.includes(r));
   if (toShow.length === 0) return null;
 
@@ -1012,7 +907,6 @@ const SUBTITLE: Record<string, string> = {
   INSTALLER: 'Track your assigned jobs, proof submissions, and earnings.',
   DEVELOPER: 'Track license activations awaiting your action and your earnings.',
   DESIGNER: 'Track your design deliverables, earnings, and monthly KPI performance.',
-  MACHINE_OPERATOR: 'Monitor your operational tasks, earnings, and workload.',
   LIAISON: 'Coordinate with clients, manage communications, and track your earnings.',
   ADMIN_STAFF: 'Manage administrative tasks, monitor activities, and oversee operations.',
   SALES_STAFF: 'Manage clients, create job orders, and track your sales performance.',
@@ -1037,7 +931,6 @@ export function DashboardPage() {
       {user?.role === 'INSTALLER' && <InstallerDashboard />}
       {user?.role === 'DEVELOPER' && <DeveloperDashboard />}
       {user?.role === 'DESIGNER' && <DesignerDashboard />}
-      {user?.role === 'MACHINE_OPERATOR' && <MachineOperatorDashboard />}
       {user?.role === 'LIAISON' && <LiaisonDashboard />}
       {user?.role === 'ADMIN_STAFF' && <AdminStaffDashboard />}
       {user?.role === 'SALES_STAFF' && <SalesStaffDashboard />}

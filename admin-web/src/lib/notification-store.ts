@@ -22,20 +22,14 @@ export type IncomingEvent = {
 const EVENT_MAP: Array<{ keywords: string[]; routes: string[]; label: string }> = [
   {
     keywords: ['job_order', 'joborder', 'job-order'],
-    routes: ['/job-orders/software', '/job-orders/design'],
+    routes: ['/job-orders/software'],
     label: 'Job order updated',
-  },
-  {
-    keywords: ['design_job', 'designjob', 'design-job'],
-    routes: ['/design-jobs', '/job-orders/design'],
-    label: 'Design job updated',
   },
   {
     keywords: ['dev_project', 'devproject', 'dev-project'],
     routes: ['/dev-projects'],
     label: 'Dev project updated',
   },
-  { keywords: ['ink', 'machine'], routes: ['/ink-tracking'], label: 'Ink tracking updated' },
   { keywords: ['audit'], routes: ['/audit-logs'], label: 'Audit log updated' },
   { keywords: ['earning'], routes: ['/earnings'], label: 'Earnings updated' },
   { keywords: ['withdrawal'], routes: ['/withdrawals'], label: 'Withdrawals updated' },
