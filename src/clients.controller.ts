@@ -28,13 +28,13 @@ export class ClientsController {
     return this.clientsService.create(dto);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.DESIGNER, UserRole.MACHINE_OPERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.DESIGNER)
   @Get()
   findAll(@Query('type') type?: ClientType) {
     return this.clientsService.findAll(type);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.DESIGNER, UserRole.MACHINE_OPERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.DESIGNER)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.clientsService.findOne(id);

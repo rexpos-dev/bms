@@ -22,7 +22,7 @@ export class JobsController {
     return this.jobsService.create(dto);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.MACHINE_OPERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser, @Query('mine') mine?: string) {
     const userRoles: UserRole[] = user.roles ?? [user.role];
@@ -31,19 +31,19 @@ export class JobsController {
     return this.jobsService.findAll(userId, user.role);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.MACHINE_OPERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
   @Get('calendar/month')
   getCalendarMonth(@Query('month') month: string, @Query('year') year: string) {
     return this.jobsService.findByMonth(Number(month), Number(year));
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.MACHINE_OPERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
   @Get('calendar/day')
   getCalendarDay(@Query('date') date: string) {
     return this.jobsService.findByDate(date);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.MACHINE_OPERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.jobsService.findOne(id);
@@ -55,7 +55,7 @@ export class JobsController {
     return this.jobsService.assignInstaller(id, dto);
   }
 
-  @Roles(UserRole.INSTALLER, UserRole.MACHINE_OPERATOR)
+  @Roles(UserRole.INSTALLER)
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,

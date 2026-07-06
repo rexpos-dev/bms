@@ -14,14 +14,14 @@ import { WithdrawalsService } from './withdrawals.service';
 export class WithdrawalsController {
   constructor(private readonly withdrawalsService: WithdrawalsService) {}
 
-  @Roles(UserRole.INSTALLER, UserRole.DEVELOPER, UserRole.DESIGNER, UserRole.MACHINE_OPERATOR, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ADMIN_STAFF)
+  @Roles(UserRole.INSTALLER, UserRole.DEVELOPER, UserRole.DESIGNER, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ADMIN_STAFF)
   @Get('balance')
   async getBalance(@CurrentUser() user: AuthenticatedUser) {
     const availableBalance = await this.withdrawalsService.computeAvailableBalance(user.id);
     return { availableBalance };
   }
 
-  @Roles(UserRole.INSTALLER, UserRole.DEVELOPER, UserRole.DESIGNER, UserRole.MACHINE_OPERATOR, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ADMIN_STAFF)
+  @Roles(UserRole.INSTALLER, UserRole.DEVELOPER, UserRole.DESIGNER, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ADMIN_STAFF)
   @Post()
   create(@Body() dto: CreateWithdrawalDto, @CurrentUser() user: AuthenticatedUser) {
     return this.withdrawalsService.create(user.id, dto);

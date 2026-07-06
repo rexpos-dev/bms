@@ -19,7 +19,6 @@ enum UserRole {
   INSTALLER
   DEVELOPER
   DESIGNER
-  MACHINE_OPERATOR
   LIAISON
   ADMIN_STAFF
   SALES_STAFF
@@ -95,22 +94,9 @@ enum DiscountType {
   PERCENTAGE
 }
 
-enum JobOrderType {
-  SOFTWARE
-  DESIGN
-}
-
 enum JobOrderStatus {
   DRAFT
   FINALIZED
-  ON_GOING
-  COMPLETED
-  CANCELLED
-}
-
-enum DesignJobStatus {
-  PENDING
-  ASSIGNED
   ON_GOING
   COMPLETED
   CANCELLED
@@ -164,9 +150,6 @@ model User {
   kpiResults        KpiResult[]
   incentives        Incentive[]
   additionalRoles   UserRoleAssignment[]
-  designJobsCreated  DesignJob[]       @relation("DesignJobCreator")
-  designJobsAssigned DesignJob[]       @relation("DesignJobOperator")
-  designJobUpdates   DesignJobUpdate[]
 
   devProjects        DevProject[]               @relation("DevProjectDeveloper")
   devReportsAuthored DevProjectReport[]          @relation("DevReportAuthor")
@@ -389,9 +372,7 @@ model DeviceToken {
 
 model JobOrder {
   id           String         @id @default(uuid())
-  type         JobOrderType   @default(SOFTWARE)
   jobId        String?        @unique @map("job_id")
-  designJobId  String?        @unique @map("design_job_id")
   clientId     String         @map("client_id")
   productId    String?        @map("product_id")
   salePrice    Decimal        @db.Decimal(12, 2) @map("sale_price")
@@ -404,7 +385,6 @@ model JobOrder {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   job       Job?             @relation(fields: [jobId], references: [id])
-  designJob DesignJob?       @relation(fields: [designJobId], references: [id])
   client    Client           @relation(fields: [clientId], references: [id])
   product   SoftwareProduct? @relation(fields: [productId], references: [id])
   items     JobOrderItem[]
@@ -580,129 +560,6 @@ model AuditLog {
   user User? @relation(fields: [userId], references: [id])
 
   @@map("audit_logs")
-}
-
-// ---------------------------------------------------------------------------
-// Machine & Ink Management (for printing machines)
-// ---------------------------------------------------------------------------
-
-enum PrinterMachineModel {
-  TS100_1600_SUBLIMATION
-  JV100_160
-  UCJV300_160
-}
-
-enum InkColor {
-  BLACK
-  CYAN
-  MAGENTA
-  YELLOW
-  CLEAR
-  WHITE
-}
-
-model PrinterMachine {
-  id        String               @id @default(uuid())
-  model     PrinterMachineModel
-  label     String               @unique // e.g., "Machine 1", "Machine 2"
-  createdAt DateTime             @default(now()) @map("created_at")
-  updatedAt DateTime             @updatedAt @map("updated_at")
-
-  machineInks   MachineInk[]
-  inkLogs       InkUsageLog[]
-  refillLogs    InkRefillLog[]
-
-  @@map("printer_machines")
-}
-
-model MachineInk {
-  id            String    @id @default(uuid())
-  machineId     String    @map("machine_id")
-  inkColor      InkColor  @map("ink_color")
-  maxCapacity   Float     @map("max_capacity") // in cc
-  currentUsage  Float     @default(0) @map("current_usage") // in cc
-  lastRefillAt  DateTime? @map("last_refill_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-
-  machine       PrinterMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
-  usageLogs     InkUsageLog[]
-  refillLogs    InkRefillLog[]
-
-  @@unique([machineId, inkColor])
-  @@map("machine_inks")
-}
-
-model InkUsageLog {
-  id           String   @id @default(uuid())
-  machineId    String   @map("machine_id")
-  machineInkId String   @map("machine_ink_id")
-  amountUsed   Float    @map("amount_used") // in cc
-  jobReference String?  @map("job_reference") // optional reference to job
-  notes        String?  @db.Text
-  recordedAt   DateTime @default(now()) @map("recorded_at")
-  recordedBy   String?  @map("recorded_by") // user ID of machine operator
-
-  machine     PrinterMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
-  machineInk  MachineInk     @relation(fields: [machineInkId], references: [id], onDelete: Cascade)
-
-  @@map("ink_usage_logs")
-}
-
-model InkRefillLog {
-  id           String   @id @default(uuid())
-  machineId    String   @map("machine_id")
-  machineInkId String   @map("machine_ink_id")
-  previousUsage Float  @map("previous_usage") // in cc before refill
-  newUsage     Float   @map("new_usage") // in cc after refill (should be 0 or close to 0)
-  refillDate   DateTime @default(now()) @map("refill_date")
-  refillBy     String?  @map("refill_by") // user ID of admin who reset
-  notes        String?  @db.Text
-
-  machine    PrinterMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
-  machineInk MachineInk     @relation(fields: [machineInkId], references: [id], onDelete: Cascade)
-
-  @@map("ink_refill_logs")
-}
-
-// ---------------------------------------------------------------------------
-// Designer Portal: Advertising Job Orders
-// ---------------------------------------------------------------------------
-
-model DesignJob {
-  id          String          @id @default(uuid())
-  title       String
-  description String?         @db.Text
-  clientName  String?         @map("client_name")
-  designerId  String          @map("designer_id")
-  operatorId  String?         @map("operator_id")
-  status      DesignJobStatus @default(PENDING)
-  dueDate     DateTime?       @map("due_date")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  designer User              @relation("DesignJobCreator", fields: [designerId], references: [id])
-  operator User?             @relation("DesignJobOperator", fields: [operatorId], references: [id])
-  updates  DesignJobUpdate[]
-  jobOrder JobOrder?
-
-  @@map("design_jobs")
-}
-
-model DesignJobUpdate {
-  id          String           @id @default(uuid())
-  designJobId String           @map("design_job_id")
-  authorId    String           @map("author_id")
-  message     String?          @db.Text
-  status      DesignJobStatus?
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  designJob DesignJob @relation(fields: [designJobId], references: [id], onDelete: Cascade)
-  author    User      @relation(fields: [authorId], references: [id])
-
-  @@map("design_job_updates")
 }
 
 // ---------------------------------------------------------------------------

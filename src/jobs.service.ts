@@ -38,10 +38,6 @@ export class JobsService {
     if (userId) {
       if (role === 'INSTALLER') {
         where.installerId = userId;
-      } else if (role === 'MACHINE_OPERATOR') {
-        // Find jobs where the user recorded ink usage, or simply return all for now 
-        // if no explicit assignment exists in Job model yet.
-        // For now, let's assume we filter by scheduleDate = today for operators.
       }
     }
 
