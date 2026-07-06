@@ -18,7 +18,6 @@ const RESOURCE_NAMES: Record<string, string> = {
   'nenpos-clients': 'NENPOS Client',
   jobs: 'Job',
   'job-orders': 'Job Order',
-  'design-jobs': 'Design Job',
   'dev-projects': 'Dev Project',
   earnings: 'Earning',
   withdrawals: 'Withdrawal',

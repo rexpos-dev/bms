@@ -884,7 +884,7 @@ function RoleTaskCard({ role, userId }: { role: UserRole; userId: string }) {
 
 function AdditionalRoleTasks({ user }: { user: AuthenticatedUser }) {
   const additionalRoles = (user.roles ?? []).filter(r => r !== user.role);
-  const SUPPORTED: UserRole[] = ['INSTALLER', 'DEVELOPER', 'DESIGNER'];
+  const SUPPORTED: UserRole[] = ['INSTALLER', 'DEVELOPER'];
   const toShow = additionalRoles.filter(r => SUPPORTED.includes(r));
   if (toShow.length === 0) return null;
 

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { JobOrderStatus, Prisma } from '@prisma/client';
+import { JobOrderStatus } from '@prisma/client';
 import type { AuthenticatedUser } from './authenticated-user.type';
 import { PrismaService } from './prisma.service';
 import { InventoryService } from './inventory.service';
