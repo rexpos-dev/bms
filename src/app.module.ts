@@ -1,6 +1,9 @@
 import { basename, join } from 'node:path';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { AuditLogsModule } from './audit-logs.module';
@@ -29,6 +32,11 @@ import { WithdrawalsModule } from './withdrawals.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
+    // Global per-IP rate limit; stricter limits sit on sensitive endpoints
+    // via @Throttle. Requires trust-proxy (set in main.ts) so the client IP
+    // survives the Tailscale Funnel proxy.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
     // Installer downloads (e.g. the mobile APK) live outside git in <cwd>/downloads.
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'downloads'),
@@ -71,6 +79,10 @@ import { WithdrawalsModule } from './withdrawals.module';
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditLogInterceptor,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
   ],
 })

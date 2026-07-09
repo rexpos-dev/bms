@@ -20,6 +20,7 @@ import {
   Wrench,
   PhilippinePeso,
   CreditCard,
+  Inbox,
   BarChart3,
   Settings,
   ClipboardList,
@@ -49,6 +50,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   '/analytics': BarChart3,
   '/settings': Settings,
   '/audit-logs': ClipboardList,
+  '/download-leads': Inbox,
   '/profile': UserCog,
 };
 
@@ -65,6 +67,7 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, NavItem[]> = {
     { to: '/jobs', label: 'Installations', indent: true },
     { to: '/earnings', label: 'Earnings', indent: true },
     { to: '/withdrawals', label: 'Withdrawals', indent: true },
+    { to: '/download-leads', label: 'Download Leads' },
     { to: '/analytics', label: 'Analytics' },
     { to: '/settings', label: 'Settings' },
   ],
@@ -110,6 +113,7 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, NavItem[]> = {
     { to: '/jobs', label: 'Installations', indent: true },
     { to: '/earnings', label: 'Earnings', indent: true },
     { to: '/withdrawals', label: 'Withdrawals', indent: true },
+    { to: '/download-leads', label: 'Download Leads' },
     { to: '/audit-logs', label: 'Audit Logs' },
   ],
   SALES_STAFF: [

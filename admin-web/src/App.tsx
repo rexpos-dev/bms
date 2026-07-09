@@ -8,6 +8,7 @@ import { AuditLogsPage } from './pages/AuditLogsPage';
 import { ClientsPage } from './pages/ClientsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { DevProjectsPage } from './pages/DevProjectsPage';
+import { DownloadLeadsPage } from './pages/DownloadLeadsPage';
 import { EarningsPage } from './pages/EarningsPage';
 import { JobOrderPage } from './pages/JobOrderPage';
 import { JobOrdersPage } from './pages/JobOrdersPage';
@@ -115,6 +116,14 @@ function App() {
           element={
             <RequireAuth roles={['SUPER_ADMIN']}>
               <AnalyticsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/download-leads"
+          element={
+            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF']}>
+              <DownloadLeadsPage />
             </RequireAuth>
           }
         />

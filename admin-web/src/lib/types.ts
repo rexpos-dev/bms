@@ -91,6 +91,17 @@ export interface Job {
   proof?: InstallationProof | null;
 }
 
+export interface DownloadLead {
+  id: string;
+  companyName: string;
+  contactPerson: string;
+  contactNo: string;
+  email: string | null;
+  emailVerified: boolean;
+  platform: 'ANDROID_APK' | 'DESKTOP_PWA';
+  createdAt: string;
+}
+
 export interface HardwareFingerprint {
   cpu: string;
   disk: string;

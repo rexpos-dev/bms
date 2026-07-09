@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
@@ -96,5 +97,21 @@ export class BackupsService {
     const filePath = this.getFilePath(filename);
     unlinkSync(filePath);
     return { filename };
+  }
+
+  /** Nightly 3 AM backup; keeps the newest 14 dumps and prunes the rest. */
+  @Cron('0 3 * * *')
+  async scheduledBackup(): Promise<void> {
+    const logger = new Logger(BackupsService.name);
+    try {
+      const file = await this.create();
+      logger.log(`Nightly backup created: ${file.filename} (${Math.round(file.size / 1024)} KB)`);
+      for (const old of this.list().slice(14)) {
+        unlinkSync(join(BACKUP_DIR, old.filename));
+        logger.log(`Pruned old backup: ${old.filename}`);
+      }
+    } catch (err) {
+      logger.error(`Nightly backup failed: ${(err as Error).message}`);
+    }
   }
 }

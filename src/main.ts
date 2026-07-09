@@ -5,6 +5,10 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Behind the Tailscale Funnel proxy the socket peer is loopback; trust its
+  // X-Forwarded-For so req.ip (and per-IP rate limiting) sees the real client.
+  app.getHttpAdapter().getInstance().set('trust proxy', 'loopback');
+
   const corsOrigins = process.env.CORS_ORIGINS?.split(',')
     .map((o) => o.trim())
     .filter(Boolean);
