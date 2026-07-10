@@ -884,7 +884,7 @@ export function LandingPage() {
           </div>
           <small>
             <ClipboardList size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />
-            ORBIT CONSOLE · POWERED BY <b style={{ color: 'var(--lp-cyan)' }}>BHAHOH DEVELOPER</b> —
+            ORBIT CONSOLE · POWERED BY <b style={{ color: 'var(--lp-cyan)' }}>BHAGOH DEVELOPER</b> —
             DASHBOARD PREVIEW USES SAMPLE DATA
           </small>
         </footer>

@@ -73,7 +73,7 @@ export function DevelopersPage() {
                 ORBIT <em>CONSOLE</em>
               </span>
             </div>
-            <small>POWERED BY <b style={{ color: 'var(--lp-cyan)' }}>BHAHOH DEVELOPER</b></small>
+            <small>POWERED BY <b style={{ color: 'var(--lp-cyan)' }}>BHAGOH DEVELOPER</b></small>
             <Link to="/" className="lp-footer-link">HOME</Link>
           </div>
         </footer>
