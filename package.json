@@ -42,6 +42,7 @@
     "class-validator": "^0.15.1",
     "firebase-admin": "^14.1.0",
     "jsonwebtoken": "^9.0.3",
+    "mysqldump": "^3.2.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
@@ -99,5 +100,10 @@
   "optionalDependencies": {
     "@emnapi/core": "1.10.0",
     "@emnapi/runtime": "1.10.0"
+  },
+  "overrides": {
+    "mysqldump": {
+      "mysql2": "^3.11.5"
+    }
   }
 }

@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import mysqldump from 'mysqldump';
 
 const execFileAsync = promisify(execFile);
 
@@ -29,18 +30,14 @@ function resolveMysqldumpPath(): string {
 }
 
 /**
- * Turn a raw child-process failure into a human-readable reason. Distinguishes a
- * genuinely missing binary (ENOENT) from a runtime dump error (which carries the
- * real cause on stderr — e.g. auth failure or a MySQL-version incompatibility on
- * the Railway MySQL 8 server), so the diagnosis isn't a guess.
+ * Turn a raw dump failure into a human-readable reason — the real cause carried on
+ * stderr (native mysqldump) or the error message (JS dumper), so the diagnosis that
+ * reaches the client isn't a generic "Internal server error".
  */
-export function describeBackupError(err: unknown, bin: string): string {
+export function describeBackupError(err: unknown): string {
   const e = err as (NodeJS.ErrnoException & { stderr?: string | Buffer }) | undefined;
-  if (e?.code === 'ENOENT') {
-    return `mysqldump executable not found (looked for "${bin}"). Install the MySQL client on the server — on Railway ensure nixpacks.toml lists "default-mysql-client", or set MYSQLDUMP_PATH.`;
-  }
   const stderr = e?.stderr?.toString().trim();
-  return stderr || e?.message || 'Unknown error while running mysqldump';
+  return stderr || e?.message || 'Unknown error while creating the backup';
 }
 
 export interface BackupFile {
@@ -76,6 +73,7 @@ export class BackupsService {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `sdlmp-${timestamp}.sql`;
     const outputPath = join(BACKUP_DIR, filename);
+    const logger = new Logger(BackupsService.name);
     const bin = resolveMysqldumpPath();
 
     try {
@@ -93,15 +91,63 @@ export class BackupsService {
         { env: { ...process.env, MYSQL_PWD: password } },
       );
     } catch (err) {
-      const detail = describeBackupError(err, bin);
-      new Logger(BackupsService.name).error(`Backup failed: ${detail}`);
-      // Clean up any partial/empty result file mysqldump may have left behind.
-      if (existsSync(outputPath)) unlinkSync(outputPath);
-      throw new InternalServerErrorException(`Backup failed: ${detail}`);
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        // No mysqldump binary on this host (e.g. the Railway container, where the
+        // MySQL client can't be installed) — fall back to a pure-JS dump that needs
+        // no system client. Windows/office-PC keeps using the native binary above.
+        logger.warn(`mysqldump binary not found (${bin}); using the built-in JS dumper`);
+        await this.dumpWithJs({ host, port, user, password, dbName }, outputPath, logger);
+      } else {
+        const detail = describeBackupError(err);
+        logger.error(`Backup failed: ${detail}`);
+        // Clean up any partial/empty result file mysqldump may have left behind.
+        if (existsSync(outputPath)) unlinkSync(outputPath);
+        throw new InternalServerErrorException(`Backup failed: ${detail}`);
+      }
     }
 
     const stats = statSync(outputPath);
     return { filename, size: stats.size, createdAt: stats.birthtime };
+  }
+
+  /**
+   * Pure-JavaScript dump (via the `mysqldump` package, backed by mysql2 so it speaks
+   * MySQL 8's caching_sha2_password) used when no mysqldump binary is available.
+   */
+  private async dumpWithJs(
+    conn: { host: string; port: string; user: string; password: string; dbName: string },
+    outputPath: string,
+    logger: Logger,
+  ): Promise<void> {
+    // mysql2 logs a noisy per-row/per-field "JSON column … interpreted as BINARY"
+    // notice; it doesn't affect the dump output, so mute just that line (it would
+    // otherwise flood the logs on every backup) and restore console.warn after.
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      if (typeof args[0] === 'string' && args[0].startsWith('typeCast: JSON column')) return;
+      originalWarn(...args);
+    };
+    try {
+      await mysqldump({
+        connection: {
+          host: conn.host,
+          port: Number(conn.port),
+          user: conn.user,
+          password: conn.password,
+          database: conn.dbName,
+        },
+        dumpToFile: outputPath,
+        // Match native mysqldump so the dump restores cleanly over an existing schema.
+        dump: { schema: { table: { dropIfExist: true } } },
+      });
+    } catch (err) {
+      const detail = describeBackupError(err);
+      logger.error(`Backup failed (JS dumper): ${detail}`);
+      if (existsSync(outputPath)) unlinkSync(outputPath);
+      throw new InternalServerErrorException(`Backup failed: ${detail}`);
+    } finally {
+      console.warn = originalWarn;
+    }
   }
 
   get(filename: string): BackupFile {
