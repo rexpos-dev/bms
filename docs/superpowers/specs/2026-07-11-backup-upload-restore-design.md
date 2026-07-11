@@ -34,19 +34,29 @@ before restore (explicitly declined — the UI instead reminds the admin to back
 
 ## Approach (chosen)
 
-**mysql2 in-process + table-block slicing.**
+**mysql2 in-process. Full restore runs the file directly; per-module restore loads
+into a scratch database, then copies selected tables.**
 
 - Full restore: execute the entire `.sql` through a `mysql2` connection with
   `multipleStatements: true`. The dump's own preamble/epilogue handles FK checks.
-- Module restore: slice the file into per-table blocks by cutting on each
-  `^DROP TABLE IF EXISTS \`x\`;` line, keep only the selected modules' tables, and
-  execute `preamble + selected blocks + epilogue`.
+- Module restore: create a uniquely-named scratch database, load the **entire** dump
+  into it (layout-independent — works for both native and JS dumps), then for each
+  selected module's tables copy scratch → live (`DROP` live table, `CREATE … LIKE`
+  scratch, `INSERT … SELECT` from scratch, FK checks off during the swap), and finally
+  `DROP DATABASE` the scratch. Dumps contain no `USE`/`CREATE DATABASE`/db-qualified
+  names (verified), so loading into a scratch DB via the connection's default database
+  is clean.
 
-Rejected alternatives:
-- **Temp-database load then copy** (`INSERT … SELECT` from a scratch DB): bulletproof
-  but needs `CREATE DATABASE` privilege, loads the whole dump every time, more failure
-  modes. Unneeded for the current DB size.
-- **Shell out to `mysql`**: fails on Railway (no client binary).
+Why not text-slicing the dump by table: the JS dumper (`mysqldump` npm pkg) writes all
+schema first and all data in a **separate** section, so a table's `CREATE` and its
+`INSERT`s are not contiguous — slicing on `DROP TABLE` boundaries would not group a
+module's data, and parsing multi-line `INSERT`s by table without a real SQL tokenizer
+is fragile. The scratch-DB copy sidesteps all parsing.
+
+Requires `CREATE DATABASE` / `DROP DATABASE` and cross-database `SELECT` privileges;
+`DATABASE_URL` uses `root` on both Railway and local, so this is satisfied.
+
+Rejected: shelling out to `mysql < file` — fails on Railway (no client binary).
 
 ## Backend
 
@@ -66,11 +76,6 @@ Rejected alternatives:
 
 Kept separate from `BackupsService` (create/list/download/delete) and `ResetService`.
 
-- `parseDump(sql): { preamble: string; blocks: Map<tableName, string>; epilogue: string }`
-  — pure function; splits on `^DROP TABLE IF EXISTS \`(\w+)\`;` boundaries. Everything
-  before the first boundary is the preamble; everything belonging to a table (its
-  DROP/CREATE/INSERT/LOCK/UNLOCK lines) up to the next boundary is that table's block;
-  the FK-re-enable tail is the epilogue. Unit-testable in isolation.
 - `MODULE_TABLES: Record<string, string[]>` — single source of truth mapping module id
   → real table names, matching the Reset modules exactly:
   - `jobs` → `jobs`, `installation_proofs`
@@ -83,10 +88,18 @@ Kept separate from `BackupsService` (create/list/download/delete) and `ResetServ
   - `notifications` → `notifications`
   - `nenpos-clients` → `nenpos_clients`
   - `audit-logs` → `audit_logs`
-- `restore(filename, modules)` — reads the file; for `'all'` runs the whole SQL, for a
-  module list rebuilds `preamble + selected tables' blocks + epilogue`; opens a one-off
-  `mysql2` connection from `DATABASE_URL` (`multipleStatements: true`), executes, closes.
-  A module id with no matching block in the dump is skipped (reported), not fatal.
+- `restore(filename, userId, password, { full, modules })` — verifies the caller's login
+  password (bcrypt, like `ResetService`), then:
+  - **Full:** reads the file and runs the whole SQL on a one-off `mysql2` connection to
+    the live DB (`multipleStatements: true`), then closes it.
+  - **Modules:** creates a scratch DB `sdlmp_restore_<timestamp>`, loads the whole dump
+    into it (connection default DB = scratch), resolves the requested modules to tables
+    via `MODULE_TABLES`, and for each such table that actually exists in the scratch DB
+    copies it into the live DB (`FK=0`; `DROP TABLE` live; `CREATE TABLE live LIKE
+    scratch`; `INSERT live SELECT * FROM scratch`; `FK=1`). Always `DROP DATABASE`
+    scratch in a `finally`. A requested table missing from the dump is skipped and
+    reported, not fatal.
+  - Returns `{ scope: 'full' | 'modules', tables: string[] }`.
 
 ### Error handling
 
@@ -132,8 +145,9 @@ Add `mysql2` as a direct dependency (already present transitively via `mysqldump
 
 ## Testing
 
-- **Unit:** `parseDump` (block boundaries, table→block map, preamble/epilogue split);
-  `MODULE_TABLES` (every id resolves to real, existing tables).
+- **Unit:** `MODULE_TABLES` (every id resolves to real, existing tables; keys match the
+  Reset module ids); the module→tables resolver (unknown ids rejected, dedupes tables).
 - **E2E (local MySQL):** create a dump, mutate rows, restore a single module → assert
-  only that module's rows revert; then a full restore → assert whole DB matches. Run
-  the same way the backup fix was verified (compiled `dist`, real DB).
+  only that module's rows revert and other modules are untouched, and the scratch DB is
+  gone afterward; then a full restore → assert whole DB matches. Run the same way the
+  backup fix was verified (compiled `dist`, real DB).
