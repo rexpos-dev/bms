@@ -8,8 +8,18 @@ import mysqldump from 'mysqldump';
 
 const execFileAsync = promisify(execFile);
 
-const BACKUP_DIR = join(process.cwd(), 'backups');
+export const BACKUP_DIR = join(process.cwd(), 'backups');
 const FILENAME_RE = /^[\w.-]+\.sql$/;
+
+/** Build a safe, collision-free backup filename from an uploaded file's name. */
+export function sanitizeUploadedBackupName(originalname: string): string {
+  const base =
+    originalname
+      .replace(/\.sql$/i, '')
+      .replace(/[^\w.-]/g, '_')
+      .slice(0, 80) || 'backup';
+  return `restored-${Date.now()}-${base}.sql`;
+}
 
 function resolveMysqldumpPath(): string {
   if (process.env.MYSQLDUMP_PATH) return process.env.MYSQLDUMP_PATH;
