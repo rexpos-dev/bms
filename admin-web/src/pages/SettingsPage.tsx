@@ -259,6 +259,57 @@ function BackupsTab() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['backups'] }),
   });
 
+  const RESTORE_WORD = 'RESTORE';
+  const [restoreTarget, setRestoreTarget] = useState<BackupFile | null>(null);
+  const [restoreScope, setRestoreScope] = useState<'full' | 'modules'>('full');
+  const [selectedModules, setSelectedModules] = useState<string[]>([]);
+  const [restorePassword, setRestorePassword] = useState('');
+  const [restoreConfirm, setRestoreConfirm] = useState('');
+  const [restoreResult, setRestoreResult] = useState<string | null>(null);
+
+  const restoreModulesQuery = useQuery({
+    queryKey: ['reset-modules'],
+    queryFn: async () => (await api.get<ResetModuleInfo[]>('/backups/reset/modules')).data,
+  });
+
+  const closeRestore = () => {
+    setRestoreTarget(null);
+    setRestoreScope('full');
+    setSelectedModules([]);
+    setRestorePassword('');
+    setRestoreConfirm('');
+  };
+
+  const restoreMutation = useMutation({
+    mutationFn: () =>
+      api.post<{ scope: string; tables: string[] }>(
+        `/backups/${encodeURIComponent(restoreTarget!.filename)}/restore`,
+        { password: restorePassword, full: restoreScope === 'full', modules: selectedModules },
+      ),
+    onSuccess: (res) => {
+      setError('');
+      setRestoreResult(
+        res.data.scope === 'full' ? 'Full database restored.' : `Restored: ${res.data.tables.join(', ')}`,
+      );
+      closeRestore();
+      qc.invalidateQueries();
+    },
+    onError: (err) => {
+      const status = (err as AxiosError)?.response?.status;
+      const msg = (err as AxiosError<{ message?: string }>).response?.data?.message;
+      setError(status === 401 ? 'Incorrect password — nothing was restored.' : msg || 'Restore failed.');
+    },
+  });
+
+  const toggleModule = (id: string) =>
+    setSelectedModules((prev) => (prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]));
+
+  const canRestore =
+    restorePassword.length > 0 &&
+    restoreConfirm === RESTORE_WORD &&
+    (restoreScope === 'full' || selectedModules.length > 0) &&
+    !restoreMutation.isPending;
+
   const downloadBackup = async (filename: string) => {
     const res = await api.get(`/backups/${encodeURIComponent(filename)}/download`, { responseType: 'blob' });
     const url = URL.createObjectURL(res.data as Blob);
@@ -302,6 +353,9 @@ function BackupsTab() {
       </div>
 
       {error && <p className="error-text">{error}</p>}
+      {restoreResult && (
+        <p style={{ color: 'var(--success)', fontSize: '0.9rem' }}>✓ {restoreResult}</p>
+      )}
 
       <div className="card" style={{ overflowX: 'auto' }}>
         {backupsQuery.isLoading && <p>Loading backups…</p>}
@@ -336,6 +390,17 @@ function BackupsTab() {
                       <button
                         type="button"
                         className="btn btn-secondary"
+                        style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem', color: 'var(--warning)', borderColor: 'var(--warning)' }}
+                        onClick={() => {
+                          setRestoreResult(null);
+                          setRestoreTarget(b);
+                        }}
+                      >
+                        Restore
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
                         style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}
                         disabled={deleteBackup.isPending}
                         onClick={() => {
@@ -352,6 +417,76 @@ function BackupsTab() {
           </table>
         )}
       </div>
+
+      <Dialog isOpen={!!restoreTarget} onClose={closeRestore} title="Restore from backup" maxWidth={480}>
+        {restoreTarget && (
+          <div>
+            <div className="card" style={{ borderColor: 'var(--danger)', background: 'var(--warning-light)', marginBottom: '1rem' }}>
+              <strong style={{ color: 'var(--danger)' }}>⚠ Destructive</strong>
+              <p style={{ margin: '0.4rem 0 0', fontSize: '0.85rem' }}>
+                Restoring overwrites live data and cannot be undone from the app. Consider creating a
+                backup first. A <strong>full</strong> restore replaces the entire database including users —
+                you may need to log in again. A <strong>module</strong> restore replaces those tables and can
+                leave references from other modules inconsistent.
+              </p>
+            </div>
+
+            <p style={{ marginTop: 0, fontSize: '0.85rem', fontFamily: 'monospace' }}>{restoreTarget.filename}</p>
+
+            <div className="field">
+              <label>What to restore</label>
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '0.25rem' }}>
+                <label style={{ display: 'inline-flex', gap: '0.35rem', alignItems: 'center', fontWeight: 400 }}>
+                  <input type="radio" name="restore-scope" checked={restoreScope === 'full'} onChange={() => setRestoreScope('full')} />
+                  Full database
+                </label>
+                <label style={{ display: 'inline-flex', gap: '0.35rem', alignItems: 'center', fontWeight: 400 }}>
+                  <input type="radio" name="restore-scope" checked={restoreScope === 'modules'} onChange={() => setRestoreScope('modules')} />
+                  Selected modules
+                </label>
+              </div>
+            </div>
+
+            {restoreScope === 'modules' && (
+              <div className="field">
+                <label>Modules</label>
+                <div style={{ display: 'grid', gap: '0.35rem', marginTop: '0.25rem' }}>
+                  {restoreModulesQuery.data?.map((m) => (
+                    <label key={m.id} style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center', fontWeight: 400, fontSize: '0.88rem' }}>
+                      <input type="checkbox" checked={selectedModules.includes(m.id)} onChange={() => toggleModule(m.id)} />
+                      {m.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="field">
+              <label>Confirm with your login password</label>
+              <input
+                type="password"
+                value={restorePassword}
+                onChange={(e) => setRestorePassword(e.target.value)}
+                placeholder="Your login password"
+                autoComplete="current-password"
+              />
+            </div>
+
+            <div className="field">
+              <label>Type <strong>{RESTORE_WORD}</strong> to confirm</label>
+              <input value={restoreConfirm} onChange={(e) => setRestoreConfirm(e.target.value)} placeholder={RESTORE_WORD} />
+            </div>
+
+            {error && <p className="error-text">{error}</p>}
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+              <button type="button" className="btn btn-danger" style={{ flex: 1 }} disabled={!canRestore} onClick={() => restoreMutation.mutate()}>
+                {restoreMutation.isPending ? 'Restoring…' : 'Restore now'}
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={closeRestore}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </Dialog>
     </div>
   );
 }
