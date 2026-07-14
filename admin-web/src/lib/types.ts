@@ -170,6 +170,30 @@ export interface JobOrder {
   items: JobOrderItem[];
 }
 
+export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'GCASH' | 'CHECK';
+
+export interface Payment {
+  id: string;
+  jobOrderId: string;
+  amount: string;
+  method: PaymentMethod;
+  referenceNo: string | null;
+  proofPhotoUrl: string | null;
+  paidAt: string;
+  recordedById: string;
+  voidedAt: string | null;
+  voidReason: string | null;
+  voidedById: string | null;
+  createdAt: string;
+}
+
+export interface JobOrderPayments {
+  grandTotal: number;
+  totalPaid: number;
+  balance: number;
+  payments: Payment[];
+}
+
 export interface AuditLog {
   id: string;
   userId: string | null;

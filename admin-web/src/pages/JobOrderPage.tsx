@@ -31,6 +31,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl } from '../lib/api';
 import { Dialog } from '../components/Dialog';
+import { JobOrderPayments } from '../components/JobOrderPayments';
+import { useAuthStore } from '../lib/auth-store';
 import type { Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderStatus, SoftwareProduct } from '../lib/types';
 
 // Quick-add materials now come from the Inventory (Settings → Inventory Management).
@@ -267,6 +269,8 @@ export function JobOrderPage() {
     enabled: !!jobId,
     retry: false,
   });
+
+  const role = useAuthStore((s) => s.user?.role);
 
   // ── Fetch the parent record ──
   const jobQuery = useQuery({
@@ -653,6 +657,10 @@ export function JobOrderPage() {
             </button>
           </div>
         </div>
+
+        {jo?.id && (
+          <JobOrderPayments jobOrderId={jo.id} canVoid={role === 'SUPER_ADMIN' || role === 'ADMIN_STAFF'} />
+        )}
 
         {/* Parent info banner */}
         {parent && (
