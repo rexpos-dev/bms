@@ -17,9 +17,9 @@ see collections, outstanding balances, and per-client payment history.
 
 - New `Payment` model, one-to-many off `JobOrder`: amount, method, optional reference
   number, optional proof photo, who recorded it, void (not edit) after the fact.
-- Balance is **computed on demand**, not stored: `netTotal (salePrice adjusted for
-  discount) − SUM(active payments)`. Voided payments are excluded from the sum but kept
-  in history for audit.
+- Balance is **computed on demand**, not stored: `grandTotal (salePrice adjusted for
+  discount, plus line items) − SUM(active payments)`. Voided payments are excluded from
+  the sum but kept in history for audit.
 - Admin-web: a "Payments" panel on the Job Order detail page (record + void + history),
   and a new **Financial Reports** page (Collections summary, Outstanding balances,
   Per-client history), each with CSV export.
@@ -46,8 +46,14 @@ templates in `JobOrderPage.tsx`.
   `admin-web/src/pages/JobOrderPage.tsx` (~L1096, L1259, L1273) — not tied to real data.
 - Discount math (`salePrice` adjusted by `discount`/`discountType`) currently exists
   **nowhere in the backend** — `src/job-orders.service.ts:31-32` only stores the raw
-  fields; any net-total calculation today happens ad hoc in frontend print code, if at
-  all.
+  fields. It *does* exist client-side: `admin-web/src/pages/JobOrderPage.tsx:198-204`,
+  `computeTotals()`, used for the printed invoice:
+  `materialsTotal = Σ(item.quantity × item.unitPrice)`,
+  `discountAmt = discountType === 'PERCENTAGE' ? salePrice × discount / 100 : discount`,
+  `softwareTotal = max(0, salePrice − discountAmt)`,
+  `grandTotal = softwareTotal + materialsTotal`. The backend balance calc below mirrors
+  this formula exactly (including line items) so a client's balance always matches the
+  total on their printed invoice.
 - Admin-web nav: `admin-web/src/layouts/AdminLayout.tsx` — `NAV_ICONS` (route → icon) and
   `NAV_ITEMS_BY_ROLE` (`Record<UserRole, NavItem[]>`, `{ to, label, end? }` +
   `{ section: true, label }` separators). `AnalyticsPage.tsx` is the closest existing
@@ -93,11 +99,12 @@ model Payment {
 - `voidedAt` null = active. Voiding never deletes the row — it's the audit trail.
 - No `edit` endpoint. Mistakes are corrected by voiding (with a required reason) and
   recording a new payment.
-- Extract `computeNetTotal(salePrice, discount, discountType)` as a small shared backend
-  helper (new, since this math doesn't exist server-side today). Used by both the
-  `JobOrder` response (so `netTotal` is consistent everywhere it's shown) and the
+- Extract `computeGrandTotal(salePrice, discount, discountType, items)` as a small shared
+  backend helper (new — this math doesn't exist server-side today), a direct port of
+  `admin-web`'s `computeTotals()` formula above (materials-inclusive). Used by both the
+  `JobOrder` response (so `grandTotal` is consistent everywhere it's shown) and the
   `Payment`/balance calculations below.
-- Balance for a Job Order: `netTotal − SUM(payment.amount WHERE voidedAt IS NULL)`.
+- Balance for a Job Order: `grandTotal − SUM(payment.amount WHERE voidedAt IS NULL)`.
   Computed at read time in the service layer, never persisted — avoids drift between a
   stored balance and the actual payment history, which is the audit source of truth.
 
@@ -109,7 +116,7 @@ existing module shape (e.g. `BackupsModule`).
 | Endpoint | Purpose | Roles |
 |---|---|---|
 | `POST /job-orders/:id/payments` | Record a payment | SUPER_ADMIN, ADMIN_STAFF, SALES_STAFF |
-| `GET /job-orders/:id/payments` | History + `netTotal`/`totalPaid`/`balance` | SUPER_ADMIN, ADMIN_STAFF, SALES_STAFF |
+| `GET /job-orders/:id/payments` | History + `grandTotal`/`totalPaid`/`balance` | SUPER_ADMIN, ADMIN_STAFF, SALES_STAFF |
 | `POST /payments/:id/void` | Void a payment (reason required) | SUPER_ADMIN, ADMIN_STAFF |
 | `GET /reports/financial/collections?from&to` | Totals grouped by `PaymentMethod` over a date range | SUPER_ADMIN, ADMIN_STAFF, SALES_STAFF |
 | `GET /reports/financial/outstanding` | Job Orders with `balance > 0` | SUPER_ADMIN, ADMIN_STAFF, SALES_STAFF |
@@ -125,7 +132,7 @@ Role checks reuse the existing role-guard pattern already applied to other modul
 ## 3. Admin-web UI
 
 - **Job Order detail (`JobOrderPage.tsx`):** new "Payments" panel — header line with Sale
-  Price, Discount, Net Total, Total Paid, Balance; a history table (date, method, amount,
+  Price, Discount, Materials Total, Grand Total, Total Paid, Balance; a history table (date, method, amount,
   reference #, recorded by, void state); "Record Payment" button opens a modal (amount,
   method dropdown, reference no., date, optional photo upload); per-row void action
   (SUPER_ADMIN/ADMIN_STAFF only) that requires a reason.
@@ -170,7 +177,7 @@ Role checks reuse the existing role-guard pattern already applied to other modul
 
 ## Testing
 
-- **Backend:** unit tests for `computeNetTotal` (FIXED and PERCENTAGE discount, zero
+- **Backend:** unit tests for `computeGrandTotal` (FIXED and PERCENTAGE discount, zero
   discount) and balance calculation (active-only sum, voided excluded, overpayment case).
   Integration-style test for void (reason required, voided payment excluded from
   subsequent balance reads).
