@@ -1,4 +1,5 @@
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { AdminList, cardStyles as s } from '@/AdminList';
 import type { JobOrder } from '@/types';
 
@@ -15,19 +16,21 @@ export default function JobOrdersScreen() {
       keyExtractor={(j) => j.id}
       emptyText="No job orders yet."
       renderItem={(j) => (
-        <View style={s.card}>
-          <View style={s.row}>
-            <Text style={s.title} numberOfLines={1}>{j.client?.businessName ?? 'Client'}</Text>
-            <View style={[s.badge, { backgroundColor: STATUS_COLOR[j.status] ?? '#6b7280' }]}>
-              <Text style={s.badgeText}>{j.status}</Text>
+        <Pressable onPress={() => router.push(`/admin/job-orders/${j.id}`)}>
+          <View style={s.card}>
+            <View style={s.row}>
+              <Text style={s.title} numberOfLines={1}>{j.client?.businessName ?? 'Client'}</Text>
+              <View style={[s.badge, { backgroundColor: STATUS_COLOR[j.status] ?? '#6b7280' }]}>
+                <Text style={s.badgeText}>{j.status}</Text>
+              </View>
+            </View>
+            <Text style={s.meta}>{j.type} · {j.product?.productName ?? 'Custom'}</Text>
+            <View style={s.row}>
+              <Text style={s.meta}>{new Date(j.createdAt).toLocaleDateString()}</Text>
+              <Text style={[s.title, { color: '#4f46e5' }]}>{peso(Number(j.salePrice))}</Text>
             </View>
           </View>
-          <Text style={s.meta}>{j.type} · {j.product?.productName ?? 'Custom'}</Text>
-          <View style={s.row}>
-            <Text style={s.meta}>{new Date(j.createdAt).toLocaleDateString()}</Text>
-            <Text style={[s.title, { color: '#4f46e5' }]}>{peso(Number(j.salePrice))}</Text>
-          </View>
-        </View>
+        </Pressable>
       )}
     />
   );
