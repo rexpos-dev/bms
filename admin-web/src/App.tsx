@@ -11,6 +11,7 @@ import { DevProjectsPage } from './pages/DevProjectsPage';
 import { DevelopersPage } from './pages/DevelopersPage';
 import { DownloadLeadsPage } from './pages/DownloadLeadsPage';
 import { EarningsPage } from './pages/EarningsPage';
+import { FinancialReportsPage } from './pages/FinancialReportsPage';
 import { JobOrderPage } from './pages/JobOrderPage';
 import { JobOrdersPage } from './pages/JobOrdersPage';
 import { JobsPage } from './pages/JobsPage';
@@ -77,6 +78,14 @@ function App() {
           element={
             <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'DESIGNER', 'LIAISON', 'SALES_STAFF']}>
               <JobOrderPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/financial-reports"
+          element={
+            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'SALES_STAFF']}>
+              <FinancialReportsPage />
             </RequireAuth>
           }
         />

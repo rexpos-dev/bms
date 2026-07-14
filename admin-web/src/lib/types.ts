@@ -398,3 +398,26 @@ export interface StockMovement {
   userId: string | null;
   createdAt: string;
 }
+
+export interface CollectionsSummary {
+  from: string | null;
+  to: string | null;
+  totalCollected: number;
+  byMethod: { method: PaymentMethod; total: number; count: number }[];
+}
+
+export interface OutstandingRow {
+  jobOrderId: string;
+  clientId: string;
+  clientName: string;
+  grandTotal: number;
+  totalPaid: number;
+  balance: number;
+  lastPaymentAt: string | null;
+}
+
+export interface ClientPaymentHistory {
+  clientId: string;
+  clientName: string;
+  payments: (Payment & { jobOrderId: string })[];
+}
