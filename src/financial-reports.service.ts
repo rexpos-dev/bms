@@ -30,7 +30,12 @@ export class FinancialReportsService {
       where: {
         voidedAt: null,
         ...(from || to
-          ? { paidAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to) } : {}) } }
+          ? {
+              paidAt: {
+                ...(from ? { gte: new Date(from) } : {}),
+                ...(to ? { lte: new Date(to + 'T23:59:59.999Z') } : {}),
+              },
+            }
           : {}),
       },
     });
@@ -70,7 +75,7 @@ export class FinancialReportsService {
       );
       const paymentsForBalance = jo.payments.map((p) => ({ amount: Number(p.amount), voidedAt: p.voidedAt }));
       const balance = computeBalance(grandTotal, paymentsForBalance);
-      if (balance <= 0) continue;
+      if (balance <= 0.005) continue;
 
       const lastPayment = [...jo.payments].sort((a, b) => b.paidAt.getTime() - a.paidAt.getTime())[0];
       rows.push({
