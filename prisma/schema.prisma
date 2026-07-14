@@ -94,6 +94,13 @@ enum DiscountType {
   PERCENTAGE
 }
 
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  GCASH
+  CHECK
+}
+
 enum JobOrderStatus {
   DRAFT
   FINALIZED
@@ -129,12 +136,12 @@ model User {
 
   // Per-user base bonus (salary grade) used as the basis for KPI incentive
   // computation: incentive = baseBonus * incentivePct(totalScore).
-  baseBonus    Decimal  @default(10000) @db.Decimal(12, 2) @map("base_bonus")
+  baseBonus Decimal @default(10000) @map("base_bonus") @db.Decimal(12, 2)
 
   // Super Admin MFA (Google Authenticator OTP)
-  mfaEnabled   Boolean  @default(false) @map("mfa_enabled")
-  mfaSecret    String?  @map("mfa_secret")
-  refreshToken String?  @map("refresh_token")
+  mfaEnabled   Boolean @default(false) @map("mfa_enabled")
+  mfaSecret    String? @map("mfa_secret")
+  refreshToken String? @map("refresh_token")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -149,12 +156,14 @@ model User {
   deviceTokens      DeviceToken[]
   kpiResults        KpiResult[]
   incentives        Incentive[]
+  paymentsRecorded  Payment[]            @relation("PaymentRecordedBy")
+  paymentsVoided    Payment[]            @relation("PaymentVoidedBy")
   additionalRoles   UserRoleAssignment[]
 
   devProjects        DevProject[]               @relation("DevProjectDeveloper")
-  devReportsAuthored DevProjectReport[]          @relation("DevReportAuthor")
-  devReportsTagged   DevProjectReport[]          @relation("DevReportTaggedAdmin")
-  devReportFeedback  DevProjectReportFeedback[]  @relation("DevReportFeedbackAuthor")
+  devReportsAuthored DevProjectReport[]         @relation("DevReportAuthor")
+  devReportsTagged   DevProjectReport[]         @relation("DevReportTaggedAdmin")
+  devReportFeedback  DevProjectReportFeedback[] @relation("DevReportFeedbackAuthor")
 
   @@map("users")
 }
@@ -189,9 +198,9 @@ model Client {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  licenses   License[]
-  jobs       Job[]
-  jobOrders  JobOrder[]
+  licenses  License[]
+  jobs      Job[]
+  jobOrders JobOrder[]
 
   @@map("clients")
 }
@@ -206,13 +215,13 @@ model SoftwareProduct {
   version        String
   licenseType    LicenseType @map("license_type")
   price          Decimal     @db.Decimal(12, 2)
-  maintenanceFee Decimal?    @db.Decimal(12, 2) @map("maintenance_fee")
+  maintenanceFee Decimal?    @map("maintenance_fee") @db.Decimal(12, 2)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  licenses   License[]
-  jobOrders  JobOrder[]
+  licenses  License[]
+  jobOrders JobOrder[]
 
   @@map("software_products")
 }
@@ -279,8 +288,8 @@ model InstallationProof {
   clientSignature String?  @map("client_signature_url")
   photoUrls       Json     @map("photo_urls")
   deviceInfo      Json?    @map("device_info")
-  gpsLatitude     Decimal? @db.Decimal(10, 7) @map("gps_latitude")
-  gpsLongitude    Decimal? @db.Decimal(10, 7) @map("gps_longitude")
+  gpsLatitude     Decimal? @map("gps_latitude") @db.Decimal(10, 7)
+  gpsLongitude    Decimal? @map("gps_longitude") @db.Decimal(10, 7)
   capturedAt      DateTime @default(now()) @map("captured_at")
 
   job Job @relation(fields: [jobId], references: [id])
@@ -353,10 +362,10 @@ model Notification {
 // One user can have several (phone, tablet, web). Invalid tokens are pruned
 // automatically when FCM reports them as unregistered.
 model DeviceToken {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  token     String   @unique
-  platform  String?  // 'android' | 'ios' | 'web'
+  id       String  @id @default(uuid())
+  userId   String  @map("user_id")
+  token    String  @unique
+  platform String? // 'android' | 'ios' | 'web'
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -375,7 +384,7 @@ model JobOrder {
   jobId        String?        @unique @map("job_id")
   clientId     String         @map("client_id")
   productId    String?        @map("product_id")
-  salePrice    Decimal        @db.Decimal(12, 2) @map("sale_price")
+  salePrice    Decimal        @map("sale_price") @db.Decimal(12, 2)
   discount     Decimal        @default(0) @db.Decimal(12, 2)
   discountType DiscountType   @default(FIXED) @map("discount_type")
   remarks      String?        @db.Text
@@ -384,10 +393,11 @@ model JobOrder {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  job       Job?             @relation(fields: [jobId], references: [id])
-  client    Client           @relation(fields: [clientId], references: [id])
-  product   SoftwareProduct? @relation(fields: [productId], references: [id])
-  items     JobOrderItem[]
+  job      Job?             @relation(fields: [jobId], references: [id])
+  client   Client           @relation(fields: [clientId], references: [id])
+  product  SoftwareProduct? @relation(fields: [productId], references: [id])
+  items    JobOrderItem[]
+  payments Payment[]
 
   @@map("job_orders")
 }
@@ -398,7 +408,7 @@ model JobOrderItem {
   name        String
   description String? @db.Text
   quantity    Int     @default(1)
-  unitPrice   Decimal @db.Decimal(12, 2) @map("unit_price")
+  unitPrice   Decimal @map("unit_price") @db.Decimal(12, 2)
 
   inventoryItemId String? @map("inventory_item_id")
 
@@ -410,6 +420,27 @@ model JobOrderItem {
   @@map("job_order_items")
 }
 
+model Payment {
+  id            String        @id @default(uuid())
+  jobOrderId    String        @map("job_order_id")
+  amount        Decimal       @db.Decimal(12, 2)
+  method        PaymentMethod
+  referenceNo   String?       @map("reference_no")
+  proofPhotoUrl String?       @map("proof_photo_url")
+  paidAt        DateTime      @map("paid_at")
+  recordedById  String        @map("recorded_by_id")
+  voidedAt      DateTime?     @map("voided_at")
+  voidReason    String?       @map("void_reason") @db.Text
+  voidedById    String?       @map("voided_by_id")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  jobOrder   JobOrder @relation(fields: [jobOrderId], references: [id])
+  recordedBy User     @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+  voidedBy   User?    @relation("PaymentVoidedBy", fields: [voidedById], references: [id])
+
+  @@map("payments")
+}
+
 // ---------------------------------------------------------------------------
 // Inventory (materials / hardware catalog with stock)
 // ---------------------------------------------------------------------------
@@ -419,7 +450,7 @@ model InventoryItem {
   name          String
   description   String? @db.Text
   barcode       String? @unique
-  unitPrice     Decimal @default(0) @db.Decimal(12, 2) @map("unit_price")
+  unitPrice     Decimal @default(0) @map("unit_price") @db.Decimal(12, 2)
   stockQty      Int     @default(0) @map("stock_qty")
   lowStockAlert Int     @default(0) @map("low_stock_alert")
   sortOrder     Int     @default(0) @map("sort_order")
@@ -462,16 +493,16 @@ model StockMovement {
 // ---------------------------------------------------------------------------
 
 model KpiResult {
-  id          String   @id @default(uuid())
-  userId      String   @map("user_id")
+  id          String  @id @default(uuid())
+  userId      String  @map("user_id")
   month       Int
   year        Int
-  kpiName     String   @map("kpi_name")
-  actualValue Decimal  @db.Decimal(10, 2) @map("actual_value")
-  targetValue Decimal  @db.Decimal(10, 2) @map("target_value")
-  weight      Decimal  @db.Decimal(5, 2)
-  score       Decimal  @db.Decimal(5, 2)
-  isManual    Boolean  @default(false) @map("is_manual")
+  kpiName     String  @map("kpi_name")
+  actualValue Decimal @map("actual_value") @db.Decimal(10, 2)
+  targetValue Decimal @map("target_value") @db.Decimal(10, 2)
+  weight      Decimal @db.Decimal(5, 2)
+  score       Decimal @db.Decimal(5, 2)
+  isManual    Boolean @default(false) @map("is_manual")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -487,9 +518,9 @@ model Incentive {
   userId      String          @map("user_id")
   month       Int
   year        Int
-  totalScore  Decimal         @db.Decimal(5, 2) @map("total_score")
-  baseBonus   Decimal         @db.Decimal(12, 2) @default(10000) @map("base_bonus")
-  bonusAmount Decimal         @db.Decimal(12, 2) @map("bonus_amount")
+  totalScore  Decimal         @map("total_score") @db.Decimal(5, 2)
+  baseBonus   Decimal         @default(10000) @map("base_bonus") @db.Decimal(12, 2)
+  bonusAmount Decimal         @map("bonus_amount") @db.Decimal(12, 2)
   status      IncentiveStatus @default(PENDING)
   remarks     String?         @db.Text
 
@@ -535,7 +566,7 @@ model CompanyProfile {
   email        String?
   website      String?
   tin          String?
-  logoUrl      String? @db.Text @map("logo_url")
+  logoUrl      String? @map("logo_url") @db.Text
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -548,10 +579,10 @@ model CompanyProfile {
 // ---------------------------------------------------------------------------
 
 model AuditLog {
-  id        String   @id @default(uuid())
-  userId    String?  @map("user_id")
+  id        String  @id @default(uuid())
+  userId    String? @map("user_id")
   action    String
-  ipAddress String?  @map("ip_address")
+  ipAddress String? @map("ip_address")
   device    String?
   metadata  Json?
 
