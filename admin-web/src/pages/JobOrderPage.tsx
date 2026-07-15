@@ -33,7 +33,7 @@ import { api, fileUrl } from '../lib/api';
 import { Dialog } from '../components/Dialog';
 import { JobOrderPayments } from '../components/JobOrderPayments';
 import { useAuthStore } from '../lib/auth-store';
-import type { Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderStatus, SoftwareProduct } from '../lib/types';
+import type { Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderStatus, JobOrderType, SoftwareProduct } from '../lib/types';
 
 // Quick-add materials now come from the Inventory (Settings → Inventory Management).
 
@@ -325,6 +325,10 @@ export function JobOrderPage() {
   const [discountType, setDiscountType] = useState<DiscountType>('FIXED');
   const [remarks, setRemarks] = useState('');
   const [items, setItems] = useState<LineItem[]>([]);
+  const [joType, setJoType] = useState<JobOrderType>('SOFTWARE');
+  const [cameraCount, setCameraCount] = useState(0);
+  const [cameraRate, setCameraRate] = useState(0);
+  const [laborPct, setLaborPct] = useState(20);
   const [customForm, setCustomForm] = useState({ name: '', description: '', quantity: 1, unitPrice: 0 });
   const [showCustomForm, setShowCustomForm] = useState(false);
 
@@ -348,6 +352,10 @@ export function JobOrderPage() {
     setDiscountType(jo.discountType);
     setRemarks(jo.remarks ?? '');
     setItems((jo.items ?? []).map(fromSaved));
+    setJoType(jo.type ?? 'SOFTWARE');
+    setCameraCount(jo.cameraCount ?? 0);
+    setCameraRate(jo.cameraRate != null ? Number(jo.cameraRate) : 0);
+    setLaborPct(jo.laborPct != null ? Number(jo.laborPct) : 20);
   }, [jobOrderQuery.data]);
 
   // ── Auto-populate from parent record ──
@@ -377,12 +385,16 @@ export function JobOrderPage() {
         await api.post<JobOrder>('/job-orders', {
           jobId,
           clientId,
-          productId,
+          productId: joType === 'SOFTWARE' ? productId : undefined,
           salePrice,
           discount,
           discountType,
           remarks: remarks || undefined,
           status,
+          type: joType,
+          cameraCount: joType === 'CCTV' && cameraCount > 0 ? cameraCount : undefined,
+          cameraRate: joType === 'CCTV' ? cameraRate : undefined,
+          laborPct: joType === 'SIGNAGE' ? laborPct : undefined,
           items: items.map(({ name, description, quantity, unitPrice, inventoryItemId }) => ({
             name,
             description: description || undefined,
@@ -477,7 +489,13 @@ export function JobOrderPage() {
   const jo = jobOrderQuery.data;
   const parent = jobQuery.data;
 
-  const canSave = !!clientId && !!productId;
+  const canSave = !!clientId && (joType === 'SOFTWARE' ? !!productId : true);
+
+  const laborIncentive =
+    joType === 'CCTV' ? cameraCount * cameraRate
+    : joType === 'SIGNAGE' ? (salePrice * laborPct) / 100
+    : 0;
+  const installerName = parent?.installer?.fullName;
 
   const handlePrint = async () => {
     if (!canSave) return;
@@ -522,7 +540,7 @@ export function JobOrderPage() {
     return (
       <div style={{ padding: '2rem' }}>
         <button type="button" className="btn btn-secondary" style={{ marginBottom: '1rem', fontSize: '0.8rem' }} onClick={() => navigate('/job-orders/software')}>
-          ← Back to Software JO
+          ← Back to Project JO
         </button>
         <div className="card" style={{ borderColor: 'var(--danger)', maxWidth: 480 }}>
           <p style={{ color: 'var(--danger)', margin: '0 0 0.5rem' }}>
@@ -548,7 +566,7 @@ export function JobOrderPage() {
     return (
       <div style={{ padding: '2rem' }}>
         <button type="button" className="btn btn-secondary" style={{ marginBottom: '1rem', fontSize: '0.8rem' }} onClick={() => navigate('/job-orders/software')}>
-          ← Back to Software JO
+          ← Back to Project JO
         </button>
         <div className="card" style={{ borderColor: 'var(--danger)', maxWidth: 480 }}>
           <p style={{ color: 'var(--danger)', margin: '0 0 0.5rem' }}>
@@ -602,9 +620,9 @@ export function JobOrderPage() {
               style={{ marginBottom: '0.75rem', fontSize: '0.8rem' }}
               onClick={() => navigate('/job-orders/software')}
             >
-              ← Back to Software JO
+              ← Back to Project JO
             </button>
-            <h1 style={{ margin: 0 }}>Software JO</h1>
+            <h1 style={{ margin: 0 }}>Project Job Order</h1>
             <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
               {jo ? `JO-${jo.id.slice(0, 8).toUpperCase()} · ${jo.status}` : 'New job order'}
             </p>
@@ -674,7 +692,8 @@ export function JobOrderPage() {
 
         {upsert.isError && (
           <p className="error-text" style={{ marginBottom: '1rem' }}>
-            Could not save the job order. Check required fields and try again.
+            {(upsert.error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+              'Could not save the job order. Check required fields and try again.'}
           </p>
         )}
 
@@ -689,7 +708,15 @@ export function JobOrderPage() {
 
             {/* Client & System */}
             <section className="card">
-              <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Client & System</h2>
+              <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Client & Project</h2>
+              <div className="field">
+                <label htmlFor="jo-type">Project Type</label>
+                <select id="jo-type" value={joType} onChange={(e) => setJoType(e.target.value as JobOrderType)}>
+                  <option value="SOFTWARE">Software</option>
+                  <option value="CCTV">CCTV Installation</option>
+                  <option value="SIGNAGE">Signage Installation</option>
+                </select>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1rem' }}>
                 <div className="field">
                   <label>Client</label>
@@ -702,17 +729,42 @@ export function JobOrderPage() {
                     isAdding={createClient.isPending}
                   />
                 </div>
+                {joType === 'SOFTWARE' && (
+                  <div className="field">
+                    <label htmlFor="jo-product">System / Software</label>
+                    <select id="jo-product" required value={productId} onChange={(e) => setProductId(e.target.value)}>
+                      <option value="">Select product…</option>
+                      {productsQuery.data?.map((p) => (
+                        <option key={p.id} value={p.id}>{p.productName} v{p.version}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {joType === 'CCTV' && (
+                  <>
+                    <div className="field">
+                      <label htmlFor="jo-camera-count">No. of Cameras</label>
+                      <input id="jo-camera-count" type="number" min={0} value={cameraCount}
+                        onChange={(e) => setCameraCount(Math.max(0, Math.floor(Number(e.target.value) || 0)))} />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="jo-camera-rate">Rate per Camera (₱)</label>
+                      <input id="jo-camera-rate" type="number" min={0} step="0.01" value={cameraRate}
+                        onChange={(e) => setCameraRate(Number(e.target.value) || 0)} />
+                    </div>
+                  </>
+                )}
+                {joType === 'SIGNAGE' && (
+                  <div className="field">
+                    <label htmlFor="jo-labor-pct">Labor %</label>
+                    <input id="jo-labor-pct" type="number" min={0} max={100} step="0.01" value={laborPct}
+                      onChange={(e) => setLaborPct(Number(e.target.value) || 0)} />
+                  </div>
+                )}
                 <div className="field">
-                  <label htmlFor="jo-product">System / Software</label>
-                  <select id="jo-product" required value={productId} onChange={(e) => setProductId(e.target.value)}>
-                    <option value="">Select product…</option>
-                    {productsQuery.data?.map((p) => (
-                      <option key={p.id} value={p.id}>{p.productName} v{p.version}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="jo-sale-price">Sale Price (₱)</label>
+                  <label htmlFor="jo-sale-price">
+                    {joType === 'SIGNAGE' ? 'Total Signage Price (₱)' : joType === 'CCTV' ? 'Contract Price (₱)' : 'Sale Price (₱)'}
+                  </label>
                   <input
                     id="jo-sale-price"
                     type="number"
@@ -971,7 +1023,9 @@ export function JobOrderPage() {
               <table style={{ fontSize: '0.9rem' }}>
                 <tbody>
                   <tr>
-                    <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>System / Software</td>
+                    <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>
+                      {joType === 'SOFTWARE' ? 'System / Software' : joType === 'CCTV' ? 'CCTV Contract' : 'Signage'}
+                    </td>
                     <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{salePrice.toLocaleString()}</td>
                   </tr>
                   {discount > 0 && (
@@ -1006,6 +1060,32 @@ export function JobOrderPage() {
                 </tbody>
               </table>
             </div>
+
+            {joType !== 'SOFTWARE' && (
+              <div className="card">
+                <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Installer Labor</h2>
+                <div style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--accent)' }}>
+                  ₱{laborIncentive.toLocaleString()}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  {joType === 'CCTV'
+                    ? `${cameraCount} camera${cameraCount === 1 ? '' : 's'} × ₱${cameraRate.toLocaleString()}`
+                    : `${laborPct}% of ₱${salePrice.toLocaleString()}`}
+                </div>
+                <div style={{ fontSize: '0.8rem', marginTop: '0.6rem' }}>
+                  {installerName ? (
+                    <>Installer: <strong>{installerName}</strong></>
+                  ) : (
+                    <span style={{ color: 'var(--warning)' }}>
+                      ⚠ No installer assigned to this job — finalize will be blocked.
+                    </span>
+                  )}
+                </div>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 0 }}>
+                  Internal cost — not shown on the client invoice. A pending earning is created for the installer when this JO is finalized.
+                </p>
+              </div>
+            )}
 
             {jo && (
               <div className="card" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
