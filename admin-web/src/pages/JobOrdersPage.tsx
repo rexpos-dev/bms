@@ -5,13 +5,49 @@ import { api } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
-import type { Job, JobOrder, JobOrderType } from '../lib/types';
+import type { DocumentType, Job, JobOrder, JobOrderType } from '../lib/types';
 
 const JO_TYPE_LABELS: Record<JobOrderType, string> = {
   SOFTWARE: 'Software',
   CCTV: 'CCTV',
   SIGNAGE: 'Signage',
 };
+
+const DOC_TABS: { value: DocumentType; label: string }[] = [
+  { value: 'JOB_ORDER', label: 'Job Order' },
+  { value: 'QUOTATION', label: 'Quotation' },
+  { value: 'INVOICE', label: 'Sales Invoice' },
+  { value: 'RECEIPT', label: 'Official Receipt' },
+];
+
+function TabButton({ label, active, count, onClick }: { label: string; active: boolean; count?: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '0.6rem 1.25rem',
+        fontWeight: 600,
+        fontSize: '0.9rem',
+        border: 'none',
+        borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
+        background: 'transparent',
+        color: active ? 'var(--accent)' : 'var(--text-muted)',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.4rem',
+      }}
+    >
+      {label}
+      {count !== undefined && (
+        <span style={{ fontSize: '0.72rem', background: active ? 'var(--accent)' : 'var(--border)', color: active ? '#fff' : 'var(--text-muted)', borderRadius: 999, padding: '0.1rem 0.45rem', fontWeight: 700 }}>
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
 
 export function JobOrdersPage() {
   const navigate = useNavigate();
@@ -22,7 +58,10 @@ export function JobOrdersPage() {
     queryFn: async () => (await api.get<JobOrder[]>('/job-orders')).data,
   });
 
-  const pg = usePagination(jobOrdersQuery.data ?? []);
+  const [activeDocTab, setActiveDocTab] = useState<DocumentType>('JOB_ORDER');
+  const allOrders = jobOrdersQuery.data ?? [];
+  const filteredOrders = allOrders.filter((jo) => (jo.docType ?? 'JOB_ORDER') === activeDocTab);
+  const pg = usePagination(filteredOrders);
 
   const jobsQuery = useQuery({
     queryKey: ['jobs', 'without-orders'],
@@ -115,11 +154,26 @@ export function JobOrdersPage() {
         </div>
       </Dialog>
 
+      {/* Document-type tabs */}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+        {DOC_TABS.map((t) => (
+          <TabButton
+            key={t.value}
+            label={t.label}
+            active={activeDocTab === t.value}
+            count={allOrders.filter((jo) => (jo.docType ?? 'JOB_ORDER') === t.value).length}
+            onClick={() => setActiveDocTab(t.value)}
+          />
+        ))}
+      </div>
+
       <div className="card">
         {jobOrdersQuery.isLoading && <p>Loading job orders…</p>}
         {jobOrdersQuery.isError && <p className="error-text">Failed to load job orders.</p>}
-        {jobOrdersQuery.data && jobOrdersQuery.data.length === 0 && <p>No job orders yet.</p>}
-        {jobOrdersQuery.data && jobOrdersQuery.data.length > 0 && (
+        {jobOrdersQuery.data && filteredOrders.length === 0 && (
+          <p>No {DOC_TABS.find((t) => t.value === activeDocTab)?.label.toLowerCase()} records yet.</p>
+        )}
+        {jobOrdersQuery.data && filteredOrders.length > 0 && (
           <>
           <table>
             <thead>

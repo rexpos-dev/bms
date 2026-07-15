@@ -356,6 +356,7 @@ export function JobOrderPage() {
     setCameraCount(jo.cameraCount ?? 0);
     setCameraRate(jo.cameraRate != null ? Number(jo.cameraRate) : 0);
     setLaborPct(jo.laborPct != null ? Number(jo.laborPct) : 20);
+    setDocType(jo.docType ?? 'JOB_ORDER');
   }, [jobOrderQuery.data]);
 
   // ── Auto-populate from parent record ──
@@ -395,6 +396,7 @@ export function JobOrderPage() {
           cameraCount: joType === 'CCTV' && cameraCount > 0 ? cameraCount : undefined,
           cameraRate: joType === 'CCTV' ? cameraRate : undefined,
           laborPct: joType === 'SIGNAGE' ? laborPct : undefined,
+          docType,
           items: items.map(({ name, description, quantity, unitPrice, inventoryItemId }) => ({
             name,
             description: description || undefined,

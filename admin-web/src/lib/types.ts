@@ -166,6 +166,8 @@ export interface JobOrderItem {
 
 export type JobOrderType = 'SOFTWARE' | 'CCTV' | 'SIGNAGE';
 
+export type DocumentType = 'JOB_ORDER' | 'QUOTATION' | 'INVOICE' | 'RECEIPT';
+
 export interface JobOrder {
   id: string;
   jobId: string | null;
@@ -180,6 +182,7 @@ export interface JobOrder {
   cameraCount: number | null;
   cameraRate: string | null;
   laborPct: string | null;
+  docType: DocumentType;
   createdAt: string;
   updatedAt: string;
   job?: Job;
