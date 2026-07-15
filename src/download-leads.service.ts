@@ -8,6 +8,18 @@ interface PendingCode {
   lastSentAt: number;
 }
 
+export interface FinaraLead {
+  id: number;
+  name: string;
+  company: string | null;
+  email: string;
+  phone: string | null;
+  message: string | null;
+  source: string | null;
+  status: 'NEW' | 'CONTACTED' | 'CLOSED';
+  createdAt: string;
+}
+
 const CODE_TTL_MS = 10 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
 const MAX_ATTEMPTS = 5;
@@ -86,5 +98,34 @@ export class DownloadLeadsService {
       throw new BadRequestException('Incorrect verification code.');
     }
     this.pending.delete(email);
+  }
+
+  // ── Finara Leads: external ERP integration ─────────────────────────────────
+
+  /** Live proxy to the Finara ERP leads export — nothing is stored locally. */
+  async fetchFinaraLeads(): Promise<FinaraLead[]> {
+    const apiKey = process.env.FINARA_API_KEY;
+    if (!apiKey) throw new BadRequestException('FINARA_API_KEY is not configured on the server.');
+
+    const base = process.env.FINARA_API_URL ?? 'https://finara.up.railway.app';
+    const url = new URL('/api/leads/export', base);
+
+    const res = await fetch(url, {
+      headers: { 'X-API-Key': apiKey, Accept: 'application/json' },
+    }).catch(() => {
+      throw new BadRequestException('Could not reach the Finara API.');
+    });
+    if (res.status === 401) throw new BadRequestException('Finara API rejected the key (401 Unauthorized).');
+    if (!res.ok) throw new BadRequestException(`Finara API returned HTTP ${res.status}.`);
+
+    // An invalid key could be redirected to an HTML page rather than a JSON
+    // error, so guard against a non-JSON body.
+    const contentType = res.headers.get('content-type') ?? '';
+    if (!contentType.includes('application/json')) {
+      throw new BadRequestException('Finara API did not return JSON — the API key may be invalid.');
+    }
+
+    const data = (await res.json()) as unknown;
+    return Array.isArray(data) ? (data as FinaraLead[]) : [];
   }
 }

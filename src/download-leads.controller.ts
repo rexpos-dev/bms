@@ -23,6 +23,14 @@ export class DownloadLeadsController {
     return { sent: await this.leads.sendCode(dto.email) };
   }
 
+  /** Admin view of inquiry leads from the external Finara ERP (live proxy). */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
+  @Get('finara')
+  findFinaraLeads() {
+    return this.leads.fetchFinaraLeads();
+  }
+
   /** Admin view of collected leads, newest first. */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
