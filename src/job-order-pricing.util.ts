@@ -23,3 +23,19 @@ export function computeBalance(
   const totalPaid = payments.filter((p) => !p.voidedAt).reduce((sum, p) => sum + p.amount, 0);
   return grandTotal - totalPaid;
 }
+
+/**
+ * Installer labor incentive per project type. Internal cost only — never part
+ * of the client invoice / grand total.
+ */
+export function computeLaborIncentive(
+  type: 'SOFTWARE' | 'CCTV' | 'SIGNAGE',
+  salePrice: number,
+  cameraCount: number | null | undefined,
+  cameraRate: number | null | undefined,
+  laborPct: number | null | undefined,
+): number {
+  if (type === 'CCTV') return (cameraCount ?? 0) * (cameraRate ?? 0);
+  if (type === 'SIGNAGE') return (salePrice * (laborPct ?? 20)) / 100;
+  return 0;
+}

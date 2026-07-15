@@ -1,4 +1,27 @@
-import { computeGrandTotal, computeBalance } from './job-order-pricing.util';
+import { computeGrandTotal, computeBalance, computeLaborIncentive } from './job-order-pricing.util';
+
+describe('computeLaborIncentive', () => {
+  it('returns 0 for SOFTWARE regardless of inputs', () => {
+    expect(computeLaborIncentive('SOFTWARE', 50000, 8, 500, 20)).toBe(0);
+  });
+
+  it('CCTV: cameraCount × cameraRate', () => {
+    expect(computeLaborIncentive('CCTV', 120000, 8, 500, null)).toBe(4000);
+  });
+
+  it('CCTV: missing count or rate yields 0', () => {
+    expect(computeLaborIncentive('CCTV', 120000, null, 500, null)).toBe(0);
+    expect(computeLaborIncentive('CCTV', 120000, 8, null, null)).toBe(0);
+  });
+
+  it('SIGNAGE: salePrice × laborPct / 100', () => {
+    expect(computeLaborIncentive('SIGNAGE', 35000, null, null, 25)).toBe(8750);
+  });
+
+  it('SIGNAGE: laborPct defaults to 20 when missing', () => {
+    expect(computeLaborIncentive('SIGNAGE', 35000, null, null, null)).toBe(7000);
+  });
+});
 
 describe('computeGrandTotal', () => {
   it('applies a FIXED discount and adds line items', () => {
