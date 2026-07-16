@@ -1124,8 +1124,8 @@ export function JobOrderPage() {
                   </tr>
                   <tr>
                     <td colSpan={2} style={{ paddingLeft: 0, paddingRight: 0, borderBottom: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <label htmlFor="jo-discount" style={{ color: 'var(--success)', fontSize: '0.9rem', flexShrink: 0 }}>
+                      <div className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
+                        <label htmlFor="jo-discount" style={{ color: 'var(--success)', flexShrink: 0 }}>
                           Discount
                         </label>
                         <input
@@ -1133,13 +1133,13 @@ export function JobOrderPage() {
                           type="number"
                           min={0}
                           step="0.01"
-                          style={{ flex: 1, minWidth: 0, textAlign: 'right' }}
+                          style={{ flex: 1, minWidth: 0, width: 'auto', textAlign: 'right', padding: '0.45rem 0.6rem' }}
                           value={discount}
                           onChange={(e) => setDiscount(Number(e.target.value))}
                         />
                         <select
                           value={discountType}
-                          style={{ width: 56, flexShrink: 0 }}
+                          style={{ width: 68, flexShrink: 0, padding: '0.45rem 0.6rem' }}
                           onChange={(e) => setDiscountType(e.target.value as DiscountType)}
                         >
                           <option value="FIXED">₱</option>
