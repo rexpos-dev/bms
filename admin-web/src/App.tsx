@@ -74,6 +74,14 @@ function App() {
           }
         />
         <Route
+          path="/job-orders/order/:joId"
+          element={
+            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'DESIGNER', 'LIAISON', 'SALES_STAFF']}>
+              <JobOrderPage />
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/job-orders/:jobId"
           element={
             <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'DESIGNER', 'LIAISON', 'SALES_STAFF']}>

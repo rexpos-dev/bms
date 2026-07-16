@@ -98,9 +98,14 @@ export function JobOrdersPage() {
         <button
           type="button"
           className="btn btn-primary"
-          onClick={() => setShowCreate(true)}
+          onClick={() => {
+            // Quotations don't need an installation yet — go straight to a
+            // standalone order; other doc types pick their installation first.
+            if (activeDocTab === 'QUOTATION') navigate('/job-orders/order/new?doc=QUOTATION');
+            else setShowCreate(true);
+          }}
         >
-          Create Project JO
+          {activeDocTab === 'QUOTATION' ? 'Create Quotation' : 'Create Project JO'}
         </button>
       </div>
 
@@ -249,7 +254,7 @@ export function JobOrdersPage() {
                         type="button"
                         className="btn btn-secondary"
                         style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
-                        onClick={() => navigate(`/job-orders/${jo.jobId}`)}
+                        onClick={() => navigate(jo.jobId ? `/job-orders/${jo.jobId}` : `/job-orders/order/${jo.id}`)}
                       >
                         View / Edit
                       </button>

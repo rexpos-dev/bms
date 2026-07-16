@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsDateString,
   IsEnum,
   IsInt,
   IsNumber,
@@ -35,6 +36,11 @@ export class JobOrderItemDto {
 }
 
 export class UpsertJobOrderDto {
+  /** Targets an existing order directly — required to re-save standalone orders (no jobId). */
+  @IsOptional()
+  @IsString()
+  id?: string;
+
   @IsOptional()
   @IsString()
   jobId?: string;
@@ -95,4 +101,14 @@ export class UpsertJobOrderDto {
   @ValidateNested({ each: true })
   @Type(() => JobOrderItemDto)
   items!: JobOrderItemDto[];
+}
+
+/** Turns a standalone quotation into a job order by creating its installation job. */
+export class ConvertJobOrderDto {
+  @IsDateString()
+  scheduleDate!: string;
+
+  @IsOptional()
+  @IsString()
+  installerId?: string;
 }

@@ -5,7 +5,7 @@ import { CurrentUser } from './current-user.decorator';
 import { Roles } from './roles.decorator';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
-import { UpsertJobOrderDto } from './upsert-job-order.dto';
+import { ConvertJobOrderDto, UpsertJobOrderDto } from './upsert-job-order.dto';
 import { JobOrdersService } from './job-orders.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -39,4 +39,10 @@ export class JobOrdersController {
     return this.jobOrdersService.findOne(id);
   }
 
+  /** Standalone quotation → job order: creates the installation job and links it */
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
+  @Post(':id/convert')
+  convert(@Param('id') id: string, @Body() dto: ConvertJobOrderDto) {
+    return this.jobOrdersService.convert(id, dto);
+  }
 }

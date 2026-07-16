@@ -661,9 +661,7 @@ function SalesStaffDashboard() {
                   <tr
                     key={jo.id}
                     style={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      if (jo.jobId) navigate(`/job-orders/${jo.jobId}`);
-                    }}
+                    onClick={() => navigate(jo.jobId ? `/job-orders/${jo.jobId}` : `/job-orders/order/${jo.id}`)}
                   >
                     <td style={{ fontWeight: 600 }}>{jo.client?.businessName ?? '—'}</td>
                     <td style={{ fontWeight: 600 }}>₱{Number(jo.salePrice).toLocaleString()}</td>
@@ -733,6 +731,14 @@ function QuickActions() {
           onClick={() => { setClientForm({ ...EMPTY_CLIENT_FORM, clientCode: generateClientCode() }); setShowClient(true); }}
         >
           + New Client
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{ fontSize: '0.875rem' }}
+          onClick={() => navigate('/job-orders/order/new?doc=QUOTATION')}
+        >
+          + New Quotation
         </button>
         <button
           type="button"

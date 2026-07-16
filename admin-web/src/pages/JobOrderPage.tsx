@@ -33,7 +33,7 @@ import { api, fileUrl } from '../lib/api';
 import { Dialog } from '../components/Dialog';
 import { JobOrderPayments } from '../components/JobOrderPayments';
 import { useAuthStore } from '../lib/auth-store';
-import type { Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderStatus, JobOrderType, SoftwareProduct } from '../lib/types';
+import type { AuthenticatedUser, Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderStatus, JobOrderType, SoftwareProduct } from '../lib/types';
 
 // Quick-add materials now come from the Inventory (Settings → Inventory Management).
 
@@ -301,7 +301,11 @@ const PRINT_STYLE = `
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function JobOrderPage() {
-  const { jobId } = useParams<{ jobId: string }>();
+  const { jobId, joId } = useParams<{ jobId: string; joId: string }>();
+  // Standalone mode: the order lives without an installation job (e.g. a
+  // quotation for a prospect). Route: /job-orders/order/:joId, 'new' = blank.
+  const standalone = !jobId;
+  const standaloneId = standalone && joId !== 'new' ? joId : undefined;
 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -320,13 +324,13 @@ export function JobOrderPage() {
 
   // ── Fetch existing job order ──
   const jobOrderQuery = useQuery({
-    queryKey: ['job-order', jobId],
+    queryKey: ['job-order', jobId ?? standaloneId],
     queryFn: async () => {
-      const endpoint = `/job-orders/by-job/${jobId}`;
+      const endpoint = standalone ? `/job-orders/${standaloneId}` : `/job-orders/by-job/${jobId}`;
       const res = await api.get<JobOrder | null>(endpoint);
       return res.data || null;
     },
-    enabled: !!jobId,
+    enabled: standalone ? !!standaloneId : !!jobId,
     retry: false,
   });
 
@@ -445,7 +449,8 @@ export function JobOrderPage() {
     mutationFn: async ({ status, doc }: { status: JobOrderStatus; doc?: DocType }) =>
       (
         await api.post<JobOrder>('/job-orders', {
-          jobId,
+          id: standalone ? (jobOrderQuery.data?.id ?? standaloneId) : undefined,
+          jobId: standalone ? undefined : jobId,
           clientId,
           productId: joType === 'SOFTWARE' ? productId : undefined,
           salePrice,
@@ -467,9 +472,39 @@ export function JobOrderPage() {
           })),
         })
       ).data,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['job-order', jobId] });
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['job-order', jobId ?? standaloneId] });
       queryClient.invalidateQueries({ queryKey: ['job-orders'] });
+      // First save of a standalone order: move onto its permanent URL.
+      if (standalone && !standaloneId) {
+        queryClient.setQueryData(['job-order', data.id], data);
+        navigate(`/job-orders/order/${data.id}`, { replace: true });
+      }
+    },
+  });
+
+  // ── Convert standalone quotation → job order ──
+  const [showConvert, setShowConvert] = useState(false);
+  const [convertDate, setConvertDate] = useState('');
+  const [convertInstallerId, setConvertInstallerId] = useState('');
+  const installersQuery = useQuery({
+    queryKey: ['users', 'INSTALLER'],
+    queryFn: async () => (await api.get<AuthenticatedUser[]>('/users', { params: { role: 'INSTALLER' } })).data,
+    enabled: showConvert,
+  });
+  const convert = useMutation({
+    mutationFn: async () =>
+      (
+        await api.post<JobOrder>(`/job-orders/${jobOrderQuery.data!.id}/convert`, {
+          scheduleDate: convertDate,
+          installerId: convertInstallerId || undefined,
+        })
+      ).data,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['job-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      setShowConvert(false);
+      navigate(`/job-orders/${data.jobId}`, { replace: true });
     },
   });
 
@@ -574,8 +609,9 @@ export function JobOrderPage() {
   const [searchParams] = useSearchParams();
   const docParam = searchParams.get('doc');
   // New JOs inherit the document type from the list page's active tab.
+  // Standalone orders default to Quotation — their usual reason to exist.
   const [docType, setDocType] = useState<DocType>(
-    DOC_TYPES.some((d) => d.value === docParam) ? (docParam as DocType) : 'JOB_ORDER',
+    DOC_TYPES.some((d) => d.value === docParam) ? (docParam as DocType) : standalone ? 'QUOTATION' : 'JOB_ORDER',
   );
   const [showMoveDialog, setShowMoveDialog] = useState(false);
   const [moveTarget, setMoveTarget] = useState<DocType>('JOB_ORDER');
@@ -659,7 +695,7 @@ export function JobOrderPage() {
       <div id="job-order-print" style={{ display: 'none' }}>
         <PrintTemplate
           docType={docType}
-          jobId={jobId ?? ''}
+          jobId={jobId ?? jo?.id ?? ''}
           joNumber={jo?.id.slice(0, 8).toUpperCase() ?? 'NEW'}
           client={client}
           product={product}
@@ -710,7 +746,17 @@ export function JobOrderPage() {
               </button>
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            {standalone && jo && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+                onClick={() => { setConvertDate(''); setConvertInstallerId(''); setShowConvert(true); }}
+              >
+                Convert to Job Order
+              </button>
+            )}
             <button
               type="button"
               className="btn btn-secondary"
@@ -1242,6 +1288,62 @@ export function JobOrderPage() {
             {upsert.isPending ? 'Saving…' : 'Apply'}
           </button>
           <button type="button" className="btn btn-secondary" onClick={() => setShowMoveDialog(false)}>
+            Cancel
+          </button>
+        </div>
+      </Dialog>
+
+      {/* ── Convert to Job Order Dialog ── */}
+      <Dialog
+        isOpen={showConvert}
+        onClose={() => setShowConvert(false)}
+        title="Convert to Job Order"
+        maxWidth={420}
+      >
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 0 }}>
+          Creates the installation job for <strong>{client?.businessName ?? 'this client'}</strong> and
+          moves this record to the Job Order tab. Pricing and materials carry over as-is.
+        </p>
+        <div className="field">
+          <label htmlFor="convert-date">Schedule date</label>
+          <input
+            id="convert-date"
+            type="date"
+            required
+            value={convertDate}
+            onChange={(e) => setConvertDate(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="convert-installer">Installer (optional)</label>
+          <select
+            id="convert-installer"
+            value={convertInstallerId}
+            onChange={(e) => setConvertInstallerId(e.target.value)}
+          >
+            <option value="">Assign later</option>
+            {(installersQuery.data ?? []).map((u) => (
+              <option key={u.id} value={u.id}>{u.fullName}</option>
+            ))}
+          </select>
+        </div>
+        {convert.isError && (
+          <p className="error-text">
+            {(convert.error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+              'Could not convert this order. Try again.'}
+          </p>
+        )}
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.25rem' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ flex: 1 }}
+            disabled={!convertDate || convert.isPending}
+            onClick={() => convert.mutate()}
+          >
+            {convert.isPending ? 'Converting…' : 'Create job & convert'}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setShowConvert(false)}>
             Cancel
           </button>
         </div>

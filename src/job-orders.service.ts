@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { DocType, JobOrderStatus, JobOrderType } from '@prisma/client';
 import type { AuthenticatedUser } from './authenticated-user.type';
 import { PrismaService } from './prisma.service';
 import { InventoryService } from './inventory.service';
-import { UpsertJobOrderDto } from './upsert-job-order.dto';
+import { ConvertJobOrderDto, UpsertJobOrderDto } from './upsert-job-order.dto';
 import { ensureLaborEarning } from './job-order-labor.util';
 
 const INCLUDE_FULL = {
@@ -21,9 +21,14 @@ export class JobOrdersService {
   ) {}
 
   async upsert(dto: UpsertJobOrderDto, user: AuthenticatedUser) {
-    const existing = dto.jobId
-      ? await this.prisma.jobOrder.findUnique({ where: { jobId: dto.jobId } })
-      : null;
+    const existing = dto.id
+      ? await this.prisma.jobOrder.findUnique({ where: { id: dto.id } })
+      : dto.jobId
+        ? await this.prisma.jobOrder.findUnique({ where: { jobId: dto.jobId } })
+        : null;
+    if (dto.id && !existing) {
+      throw new NotFoundException(`Job order ${dto.id} not found`);
+    }
 
     const data = {
       clientId: dto.clientId,
@@ -117,6 +122,31 @@ export class JobOrdersService {
     return this.prisma.jobOrder.findMany({
       orderBy: { createdAt: 'desc' },
       include: INCLUDE_FULL,
+    });
+  }
+
+  /** Standalone quotation → job order: creates the installation job and links it. */
+  async convert(id: string, dto: ConvertJobOrderDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const jobOrder = await tx.jobOrder.findUnique({ where: { id } });
+      if (!jobOrder) throw new NotFoundException(`Job order ${id} not found`);
+      if (jobOrder.jobId) {
+        throw new BadRequestException('This order is already linked to an installation job.');
+      }
+
+      const job = await tx.job.create({
+        data: {
+          clientId: jobOrder.clientId,
+          scheduleDate: new Date(dto.scheduleDate),
+          installerId: dto.installerId ?? null,
+        },
+      });
+
+      return tx.jobOrder.update({
+        where: { id },
+        data: { jobId: job.id, docType: DocType.JOB_ORDER },
+        include: INCLUDE_FULL,
+      });
     });
   }
 }
