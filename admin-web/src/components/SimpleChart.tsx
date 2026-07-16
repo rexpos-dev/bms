@@ -165,7 +165,9 @@ export function SimplePieChart({ data, size = 220 }: SimplePieChartProps) {
   let currentAngle = -Math.PI / 2;
 
   const slices = data.map((d, i) => {
-    const sliceAngle = (d.value / total) * Math.PI * 2;
+    // Cap just below a full turn: a 360° arc has identical start/end points
+    // and renders as an empty path (e.g. a single status holding 100%).
+    const sliceAngle = Math.min((d.value / total) * Math.PI * 2, Math.PI * 2 - 0.001);
     const startAngle = currentAngle;
     const endAngle = currentAngle + sliceAngle;
     currentAngle = endAngle;
