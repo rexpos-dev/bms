@@ -11,9 +11,9 @@ export function computeGrandTotal(
   items: { quantity: number; unitPrice: number }[],
 ): number {
   const materialsTotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const discountAmt = discountType === 'PERCENTAGE' ? (salePrice * discount) / 100 : discount;
-  const softwareTotal = Math.max(0, salePrice - discountAmt);
-  return softwareTotal + materialsTotal;
+  const subtotal = salePrice + materialsTotal;
+  const discountAmt = discountType === 'PERCENTAGE' ? (subtotal * discount) / 100 : discount;
+  return Math.max(0, subtotal - discountAmt);
 }
 
 export function computeBalance(

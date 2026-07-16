@@ -259,10 +259,10 @@ function fromSaved(item: JobOrderItem): LineItem {
 
 function computeTotals(salePrice: number, discount: number, discountType: DiscountType, items: LineItem[]) {
   const materialsTotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-  const discountAmt = discountType === 'PERCENTAGE' ? (salePrice * discount) / 100 : discount;
-  const softwareTotal = Math.max(0, salePrice - discountAmt);
-  const grandTotal = softwareTotal + materialsTotal;
-  return { materialsTotal, discountAmt, softwareTotal, grandTotal };
+  const subtotal = salePrice + materialsTotal;
+  const discountAmt = discountType === 'PERCENTAGE' ? (subtotal * discount) / 100 : discount;
+  const grandTotal = Math.max(0, subtotal - discountAmt);
+  return { materialsTotal, subtotal, discountAmt, grandTotal };
 }
 
 // ─── Print CSS (injected once inside a useEffect, not at module scope) ───────
@@ -545,7 +545,7 @@ export function JobOrderPage() {
     setItems((prev) => prev.filter((i) => i._key !== key));
   };
 
-  const { materialsTotal, discountAmt, softwareTotal, grandTotal } = computeTotals(salePrice, discount, discountType, items);
+  const { materialsTotal, subtotal, discountAmt, grandTotal } = computeTotals(salePrice, discount, discountType, items);
 
   const product = productsQuery.data?.find((p) => p.id === productId);
   const client = clientsQuery.data?.find((c) => c.id === clientId);
@@ -664,8 +664,8 @@ export function JobOrderPage() {
           client={client}
           product={product}
           salePrice={salePrice}
+          subtotal={subtotal}
           discountAmt={discountAmt}
-          softwareTotal={softwareTotal}
           materialsTotal={materialsTotal}
           grandTotal={grandTotal}
           items={items}
@@ -848,27 +848,6 @@ export function JobOrderPage() {
                       List price: ₱{Number(product.price).toLocaleString()}
                     </span>
                   )}
-                </div>
-                <div className="field">
-                  <label>Discount</label>
-                  <div style={{ display: 'flex', gap: '0.4rem' }}>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      style={{ flex: 1 }}
-                      value={discount}
-                      onChange={(e) => setDiscount(Number(e.target.value))}
-                    />
-                    <select
-                      value={discountType}
-                      style={{ width: 80 }}
-                      onChange={(e) => setDiscountType(e.target.value as DiscountType)}
-                    >
-                      <option value="FIXED">₱</option>
-                      <option value="PERCENTAGE">%</option>
-                    </select>
-                  </div>
                 </div>
               </div>
               <div className="field">
@@ -1133,26 +1112,47 @@ export function JobOrderPage() {
                     </td>
                     <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{salePrice.toLocaleString()}</td>
                   </tr>
-                  {discount > 0 && (
-                    <tr>
-                      <td style={{ color: 'var(--success)', paddingLeft: 0, borderBottom: 'none' }}>
-                        Discount {discountType === 'PERCENTAGE' ? `(${discount}%)` : ''}
-                      </td>
-                      <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none', color: 'var(--success)' }}>
-                        −₱{discountAmt.toLocaleString()}
-                      </td>
-                    </tr>
-                  )}
-                  <tr>
-                    <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>Software net</td>
-                    <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{softwareTotal.toLocaleString()}</td>
-                  </tr>
                   {items.length > 0 && (
                     <tr>
                       <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>Materials ({items.length} item{items.length > 1 ? 's' : ''})</td>
                       <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{materialsTotal.toLocaleString()}</td>
                     </tr>
                   )}
+                  <tr>
+                    <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>Subtotal</td>
+                    <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{subtotal.toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td colSpan={2} style={{ paddingLeft: 0, paddingRight: 0, borderBottom: 'none' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <label htmlFor="jo-discount" style={{ color: 'var(--success)', fontSize: '0.9rem', flexShrink: 0 }}>
+                          Discount
+                        </label>
+                        <input
+                          id="jo-discount"
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          style={{ flex: 1, minWidth: 0, textAlign: 'right' }}
+                          value={discount}
+                          onChange={(e) => setDiscount(Number(e.target.value))}
+                        />
+                        <select
+                          value={discountType}
+                          style={{ width: 56, flexShrink: 0 }}
+                          onChange={(e) => setDiscountType(e.target.value as DiscountType)}
+                        >
+                          <option value="FIXED">₱</option>
+                          <option value="PERCENTAGE">%</option>
+                        </select>
+                      </div>
+                      {discount > 0 && (
+                        <div style={{ textAlign: 'right', color: 'var(--success)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                          −₱{discountAmt.toLocaleString()}{discountType === 'PERCENTAGE' ? ` (${discount}%)` : ''}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
                   <tr>
                     <td colSpan={2} style={{ borderBottom: '2px solid var(--border)', padding: 0 }} />
                   </tr>
@@ -1345,8 +1345,8 @@ interface PrintTemplateProps {
   client?: Client;
   product?: SoftwareProduct;
   salePrice: number;
+  subtotal: number;
   discountAmt: number;
-  softwareTotal: number;
   materialsTotal: number;
   grandTotal: number;
   items: LineItem[];
@@ -1364,7 +1364,7 @@ interface PrintTemplateProps {
 
 function PrintTemplate({
   docType, jobId, joNumber, client, product,
-  salePrice, discountAmt, softwareTotal, materialsTotal, grandTotal,
+  salePrice, subtotal, discountAmt, materialsTotal, grandTotal,
   items, remarks, status, createdAt, companyName, companyLogoUrl,
   companyAddress, companyPhone, companyEmail, companyWebsite, companyTin,
 }: PrintTemplateProps) {
@@ -1429,8 +1429,6 @@ function PrintTemplate({
               <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Item</th>
               <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Details</th>
               <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Price</th>
-              <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Discount</th>
-              <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Net</th>
             </tr>
           </thead>
           <tbody>
@@ -1441,9 +1439,7 @@ function PrintTemplate({
               <td style={{ border: '1px solid #ccc', padding: '6pt' }}>
                 v{product?.version ?? '—'}
               </td>
-              <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>{p(salePrice)}</td>
-              <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', color: '#16a34a' }}>{discountAmt > 0 ? `−${p(discountAmt)}` : '—'}</td>
-              <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(softwareTotal)}</td>
+              <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(salePrice)}</td>
             </tr>
           </tbody>
         </table>
@@ -1482,9 +1478,19 @@ function PrintTemplate({
         </div>
       )}
 
-      {/* Grand Total */}
+      {/* Totals */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16pt' }}>
-        <div style={{ border: '2px solid #000', borderRadius: '4pt', padding: '10pt 20pt', textAlign: 'right' }}>
+        <div style={{ border: '2px solid #000', borderRadius: '4pt', padding: '10pt 20pt', textAlign: 'right', minWidth: '160pt' }}>
+          {discountAmt > 0 && (
+            <>
+              <div style={{ fontSize: '10pt', color: '#555', display: 'flex', justifyContent: 'space-between', gap: '16pt' }}>
+                <span>Subtotal</span><span>{p(subtotal)}</span>
+              </div>
+              <div style={{ fontSize: '10pt', color: '#16a34a', display: 'flex', justifyContent: 'space-between', gap: '16pt', borderBottom: '1px solid #ccc', paddingBottom: '4pt', marginBottom: '4pt' }}>
+                <span>Discount</span><span>−{p(discountAmt)}</span>
+              </div>
+            </>
+          )}
           <div style={{ fontSize: '10pt', color: '#555' }}>{totalLabel}</div>
           <div style={{ fontSize: '18pt', fontWeight: 'bold' }}>{p(grandTotal)}</div>
         </div>

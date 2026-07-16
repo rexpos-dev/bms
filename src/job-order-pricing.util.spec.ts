@@ -24,11 +24,15 @@ describe('computeLaborIncentive', () => {
 });
 
 describe('computeGrandTotal', () => {
-  it('applies a FIXED discount and adds line items', () => {
+  it('applies a FIXED discount to the whole order (software + materials)', () => {
     expect(computeGrandTotal(10000, 1000, 'FIXED', [{ quantity: 2, unitPrice: 500 }])).toBe(10000);
   });
 
-  it('applies a PERCENTAGE discount', () => {
+  it('applies a PERCENTAGE discount on the subtotal including materials', () => {
+    expect(computeGrandTotal(10000, 10, 'PERCENTAGE', [{ quantity: 2, unitPrice: 500 }])).toBe(9900);
+  });
+
+  it('applies a PERCENTAGE discount with no materials', () => {
     expect(computeGrandTotal(10000, 10, 'PERCENTAGE', [])).toBe(9000);
   });
 
@@ -36,8 +40,8 @@ describe('computeGrandTotal', () => {
     expect(computeGrandTotal(5000, 0, 'FIXED', [])).toBe(5000);
   });
 
-  it('never lets the discounted software total go negative', () => {
-    expect(computeGrandTotal(100, 500, 'FIXED', [])).toBe(0);
+  it('never lets the grand total go negative', () => {
+    expect(computeGrandTotal(100, 500, 'FIXED', [{ quantity: 1, unitPrice: 200 }])).toBe(0);
   });
 
   it('sums multiple line items', () => {
