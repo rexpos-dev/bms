@@ -15,6 +15,19 @@ function fmtDate(val: string | null | undefined) {
   return val ? new Date(val).toLocaleDateString() : '—';
 }
 
+function TrialBadge() {
+  return (
+    <span style={{
+      fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.05em',
+      background: 'var(--accent)', color: '#fff',
+      borderRadius: 4, padding: '0.1rem 0.35rem', marginLeft: '0.4rem',
+      verticalAlign: 'middle',
+    }}>
+      TRIAL
+    </span>
+  );
+}
+
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
@@ -488,6 +501,8 @@ export function LicensesPage() {
   const [clientId, setClientId] = useState('');
   const [productId, setProductId] = useState('');
   const [licenseKey, setLicenseKey] = useState('');
+  const [isTrial, setIsTrial] = useState(false);
+  const [trialDays, setTrialDays] = useState(30);
   const [showForm, setShowForm] = useState(false);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [fingerprint, setFingerprint] = useState(EMPTY_FINGERPRINT_FORM);
@@ -515,11 +530,17 @@ export function LicensesPage() {
   const [generateError, setGenerateError] = useState('');
 
   const generateLicense = useMutation({
-    mutationFn: async () =>
-      (await api.post<License>('/licenses', { clientId, productId, licenseKey: licenseKey.trim() })).data,
+    mutationFn: async () => {
+      const payload = isTrial
+        ? { clientId, productId, isTrial: true, trialDays }
+        : { clientId, productId, licenseKey: licenseKey.trim() };
+      return (await api.post<License>('/licenses', payload)).data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['licenses'] });
-      setClientId(''); setProductId(''); setLicenseKey(''); setGenerateError(''); setShowForm(false);
+      setClientId(''); setProductId(''); setLicenseKey('');
+      setIsTrial(false); setTrialDays(30);
+      setGenerateError(''); setShowForm(false);
     },
     onError: (err: any) => {
       setGenerateError(err?.response?.data?.message ?? 'Could not save the license. Try again.');
@@ -599,8 +620,29 @@ export function LicensesPage() {
       {activeTab === 'licenses' && (
         <>
           {/* Add license dialog */}
-          <Dialog isOpen={showForm && !isDeveloper} onClose={() => { setShowForm(false); setGenerateError(''); }} title="Add License" maxWidth={480}>
+          <Dialog isOpen={showForm && !isDeveloper} onClose={() => { setShowForm(false); setGenerateError(''); setIsTrial(false); setTrialDays(30); }} title="Add License" maxWidth={480}>
             <form onSubmit={(e) => { e.preventDefault(); generateLicense.mutate(); }}>
+              <div className="field">
+                <label>License type</label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    className={`btn ${!isTrial ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ flex: 1 }}
+                    onClick={() => setIsTrial(false)}
+                  >
+                    Full
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${isTrial ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ flex: 1 }}
+                    onClick={() => setIsTrial(true)}
+                  >
+                    Trial
+                  </button>
+                </div>
+              </div>
               <div className="field">
                 <label htmlFor="clientId">Client</label>
                 <select id="clientId" required value={clientId} onChange={(e) => setClientId(e.target.value)}>
@@ -619,27 +661,45 @@ export function LicensesPage() {
                   ))}
                 </select>
               </div>
-              <div className="field">
-                <label htmlFor="licenseKey">License key</label>
-                <input
-                  id="licenseKey"
-                  type="text"
-                  required
-                  value={licenseKey}
-                  onChange={(e) => setLicenseKey(e.target.value)}
-                  placeholder="Enter the key issued by the provider"
-                  style={{ fontFamily: 'monospace' }}
-                />
-                <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  Enter the license key issued by the 3rd-party provider.
-                </p>
-              </div>
+              {isTrial ? (
+                <div className="field">
+                  <label htmlFor="trialDays">Trial days</label>
+                  <input
+                    id="trialDays"
+                    type="number"
+                    min={1}
+                    max={365}
+                    required
+                    value={trialDays}
+                    onChange={(e) => setTrialDays(Number(e.target.value))}
+                  />
+                  <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    A unique trial key is generated automatically. The countdown starts when the developer activates it on-site.
+                  </p>
+                </div>
+              ) : (
+                <div className="field">
+                  <label htmlFor="licenseKey">License key</label>
+                  <input
+                    id="licenseKey"
+                    type="text"
+                    required
+                    value={licenseKey}
+                    onChange={(e) => setLicenseKey(e.target.value)}
+                    placeholder="Enter the key issued by the provider"
+                    style={{ fontFamily: 'monospace' }}
+                  />
+                  <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    Enter the license key issued by the 3rd-party provider.
+                  </p>
+                </div>
+              )}
               {generateError && <p className="error-text">{generateError}</p>}
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
                 <button type="submit" className="btn btn-primary" disabled={generateLicense.isPending} style={{ flex: 1 }}>
                   {generateLicense.isPending ? 'Saving…' : 'Save license'}
                 </button>
-                <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setGenerateError(''); }}>Cancel</button>
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setGenerateError(''); setIsTrial(false); setTrialDays(30); }}>Cancel</button>
               </div>
             </form>
           </Dialog>
@@ -684,7 +744,7 @@ export function LicensesPage() {
             {viewLicense && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <DetailRow label="Status" value={<StatusBadge status={viewLicense.status} />} />
+                  <DetailRow label="Status" value={<><StatusBadge status={viewLicense.status} />{viewLicense.isTrial && <TrialBadge />}</>} />
                   <DetailRow label="Client" value={<strong>{viewLicense.client?.businessName ?? '—'}</strong>} />
                 </div>
                 <DetailRow label="License Key" value={
@@ -693,6 +753,9 @@ export function LicensesPage() {
                   </span>
                 } />
                 <DetailRow label="Software Product" value={viewLicense.product?.productName ?? '—'} />
+                {viewLicense.isTrial && (
+                  <DetailRow label="Trial Period" value={`${viewLicense.trialDays ?? 30} days from activation`} />
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <DetailRow label="Activation Date" value={fmtDate(viewLicense.activationDate)} />
                   <DetailRow label="Expiry Date" value={fmtDate(viewLicense.expirationDate)} />
@@ -754,7 +817,10 @@ export function LicensesPage() {
                             <tr key={license.id}>
                               <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{license.client?.businessName ?? '—'}</td>
                               <td style={{ whiteSpace: 'nowrap' }}>{license.product?.productName ?? '—'}</td>
-                              <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{license.licenseKey}</td>
+                              <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                {license.licenseKey}
+                                {license.isTrial && <TrialBadge />}
+                              </td>
                               <td><StatusBadge status={license.status} /></td>
                               <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(license.activationDate)}</td>
                               <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(license.expirationDate)}</td>

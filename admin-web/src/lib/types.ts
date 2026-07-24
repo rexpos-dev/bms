@@ -61,6 +61,8 @@ export interface License {
   status: LicenseStatus;
   activationDate: string | null;
   expirationDate: string | null;
+  isTrial: boolean;
+  trialDays: number | null;
   client?: Client;
   product?: SoftwareProduct;
 }
