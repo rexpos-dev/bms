@@ -252,6 +252,8 @@ model License {
   activationDate DateTime?     @map("activation_date")
   expirationDate DateTime?     @map("expiration_date")
   status         LicenseStatus @default(PENDING)
+  isTrial        Boolean       @default(false) @map("is_trial")
+  trialDays      Int?          @map("trial_days")
 
   // Activation security: JWT license token + RSA-4096 signature + hardware fingerprint
   licenseToken        String? @map("license_token") @db.Text
