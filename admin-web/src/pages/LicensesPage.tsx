@@ -15,6 +15,19 @@ function fmtDate(val: string | null | undefined) {
   return val ? new Date(val).toLocaleDateString() : '—';
 }
 
+function TrialBadge() {
+  return (
+    <span style={{
+      fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.05em',
+      background: 'var(--accent)', color: '#fff',
+      borderRadius: 4, padding: '0.1rem 0.35rem', marginLeft: '0.4rem',
+      verticalAlign: 'middle',
+    }}>
+      TRIAL
+    </span>
+  );
+}
+
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
@@ -731,7 +744,7 @@ export function LicensesPage() {
             {viewLicense && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <DetailRow label="Status" value={<StatusBadge status={viewLicense.status} />} />
+                  <DetailRow label="Status" value={<><StatusBadge status={viewLicense.status} />{viewLicense.isTrial && <TrialBadge />}</>} />
                   <DetailRow label="Client" value={<strong>{viewLicense.client?.businessName ?? '—'}</strong>} />
                 </div>
                 <DetailRow label="License Key" value={
@@ -740,6 +753,9 @@ export function LicensesPage() {
                   </span>
                 } />
                 <DetailRow label="Software Product" value={viewLicense.product?.productName ?? '—'} />
+                {viewLicense.isTrial && (
+                  <DetailRow label="Trial Period" value={`${viewLicense.trialDays ?? 30} days from activation`} />
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <DetailRow label="Activation Date" value={fmtDate(viewLicense.activationDate)} />
                   <DetailRow label="Expiry Date" value={fmtDate(viewLicense.expirationDate)} />
@@ -801,7 +817,10 @@ export function LicensesPage() {
                             <tr key={license.id}>
                               <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{license.client?.businessName ?? '—'}</td>
                               <td style={{ whiteSpace: 'nowrap' }}>{license.product?.productName ?? '—'}</td>
-                              <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{license.licenseKey}</td>
+                              <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                {license.licenseKey}
+                                {license.isTrial && <TrialBadge />}
+                              </td>
                               <td><StatusBadge status={license.status} /></td>
                               <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(license.activationDate)}</td>
                               <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(license.expirationDate)}</td>
