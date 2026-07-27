@@ -480,12 +480,56 @@ select.input:focus {
 /* ═══════════════════════════════════════
    CHECKLIST
 ═══════════════════════════════════════ */
-.checklist-item {
+/* Checklist rows are <label>s that may live inside a .field, so they inherit
+   the uppercase/muted form-label look and the full-width input sizing.
+   Undo both here. */
+.checklist-item,
+.field label.checklist-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.6rem;
   font-size: 0.9rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text);
   padding: 0.3rem 0;
+  cursor: pointer;
+}
+
+.checklist-item input[type="checkbox"],
+.field .checklist-item input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.checklist-item input[type="checkbox"]:disabled {
+  cursor: default;
+}
+
+/* ═══════════════════════════════════════
+   INLINE LINKS (auto-linked URLs in user text)
+═══════════════════════════════════════ */
+.inline-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  /* long URLs must break instead of widening the container */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.inline-link:hover {
+  text-decoration-thickness: 2px;
+  filter: brightness(1.15);
 }
 
 /* ═══════════════════════════════════════
@@ -513,6 +557,39 @@ select.input:focus {
   animation: dialog-enter 0.24s cubic-bezier(0.34, 1.4, 0.64, 1);
   border-top: 2.5px solid var(--accent) !important;
   border-radius: 14px !important;
+}
+
+/* Two-column layout for the dev-project detail dialog: summary + controls on
+   the left, reports feed and new-report form on the right. Collapses to a
+   single column on narrow screens. */
+.dp-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 1.75rem;
+  align-items: start;
+}
+
+.dp-detail-grid > .dp-detail-col {
+  min-width: 0;
+}
+
+.dp-detail-grid > .dp-detail-col + .dp-detail-col {
+  padding-left: 1.75rem;
+  border-left: 1px solid var(--border);
+}
+
+@media (max-width: 900px) {
+  .dp-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  .dp-detail-grid > .dp-detail-col + .dp-detail-col {
+    padding-left: 0;
+    padding-top: 1.25rem;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
 }
 
 .dialog-header {

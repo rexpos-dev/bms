@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { Dialog } from '../components/Dialog';
+import { Linkify } from '../components/Linkify';
 import { Pagination, usePagination } from '../components/Pagination';
 import { ProgressBar } from '../components/ProgressBar';
 import { StatusBadge } from '../components/StatusBadge';
@@ -536,14 +537,14 @@ export function DevProjectsPage() {
                             ))}
                           </div>
                         )}
-                        {report.comment && <div style={{ fontSize: '0.9rem', marginBottom: '0.4rem' }}>{report.comment}</div>}
+                        {report.comment && <div style={{ fontSize: '0.9rem', marginBottom: '0.4rem' }}><Linkify text={report.comment} /></div>}
                         {report.feedback && report.feedback.length > 0 && (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
                             {report.feedback.map((f) => (
                               <div key={f.id} style={{ fontSize: '0.85rem' }}>
                                 <span style={{ fontWeight: 600 }}>{f.author?.fullName ?? 'Admin'}</span>
                                 <span style={{ color: 'var(--text-muted)' }}> · {new Date(f.createdAt).toLocaleString()}</span>
-                                <div>{f.message}</div>
+                                <div><Linkify text={f.message} /></div>
                               </div>
                             ))}
                           </div>
@@ -577,10 +578,12 @@ export function DevProjectsPage() {
         )}
       </Dialog>
 
-      <Dialog isOpen={!!selectedId} onClose={closeDetail} title={selectedProject?.name ?? ''} maxWidth={680}>
+      <Dialog isOpen={!!selectedId} onClose={closeDetail} title={selectedProject?.name ?? ''} maxWidth={1100}>
         {detailQuery.isLoading && <p>Loading…</p>}
         {selectedProject && (
-          <div>
+          <div className="dp-detail-grid">
+            {/* Left column — summary, progress controls, session history */}
+            <section className="dp-detail-col">
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '1rem' }}>
               <div>{fieldLabel('Status')}<StatusBadge status={selectedProject.status} /></div>
               <div>{fieldLabel('Developer')}{selectedProject.developer?.fullName ?? '—'}</div>
@@ -661,7 +664,7 @@ export function DevProjectsPage() {
             {selectedProject.sessions && selectedProject.sessions.length > 0 && (
               <div style={{ marginBottom: '1.25rem' }}>
                 <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>Session history</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: 160, overflowY: 'auto' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: 260, overflowY: 'auto' }}>
                   {selectedProject.sessions.map((s) => (
                     <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                       <span>{new Date(s.startedAt).toLocaleString()}</span>
@@ -671,9 +674,12 @@ export function DevProjectsPage() {
                 </div>
               </div>
             )}
+            </section>
 
+            {/* Right column — reports feed and the new-report form */}
+            <section className="dp-detail-col">
             <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>Reports</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: 320, overflowY: 'auto', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: 380, overflowY: 'auto', marginBottom: '1.25rem' }}>
               {(!selectedProject.reports || selectedProject.reports.length === 0) && (
                 <p style={{ color: 'var(--text-muted)', margin: 0 }}>No reports yet.</p>
               )}
@@ -699,7 +705,7 @@ export function DevProjectsPage() {
                         ))}
                       </div>
                     )}
-                    {report.comment && <div style={{ fontSize: '0.9rem', marginBottom: '0.4rem' }}>{report.comment}</div>}
+                    {report.comment && <div style={{ fontSize: '0.9rem', marginBottom: '0.4rem' }}><Linkify text={report.comment} /></div>}
 
                     {report.feedback && report.feedback.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
@@ -707,7 +713,7 @@ export function DevProjectsPage() {
                           <div key={f.id} style={{ fontSize: '0.85rem' }}>
                             <span style={{ fontWeight: 600 }}>{f.author?.fullName ?? 'Admin'}</span>
                             <span style={{ color: 'var(--text-muted)' }}> · {new Date(f.createdAt).toLocaleString()}</span>
-                            <div>{f.message}</div>
+                            <div><Linkify text={f.message} /></div>
                           </div>
                         ))}
                       </div>
@@ -810,6 +816,7 @@ export function DevProjectsPage() {
                 </form>
               </div>
             )}
+            </section>
           </div>
         )}
       </Dialog>
