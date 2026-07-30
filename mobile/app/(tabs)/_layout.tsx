@@ -24,6 +24,8 @@ export default function TabsLayout() {
   if (!user) return <Redirect href="/login" />;
 
   const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN_STAFF';
+  // Dev projects are owned by developers; super admin can see and edit them too.
+  const isDeveloper = user.role === 'DEVELOPER' || user.role === 'SUPER_ADMIN';
 
   return (
     <MaterialTopTabs
@@ -50,6 +52,11 @@ export default function TabsLayout() {
       <MaterialTopTabs.Screen
         name="earnings"
         options={{ title: 'Earnings', href: isAdmin ? null : undefined, tabBarIcon: ({ color }: { color: string }) => <TabIcon label="💰" color={color} /> }}
+      />
+      {/* Developer (and super admin) */}
+      <MaterialTopTabs.Screen
+        name="projects"
+        options={{ title: 'Projects', href: isDeveloper ? undefined : null, tabBarIcon: ({ color }: { color: string }) => <TabIcon label="💻" color={color} /> }}
       />
       {/* Admin-only */}
       <MaterialTopTabs.Screen

@@ -26,6 +26,17 @@ export default function RootLayout() {
             name="job/[id]"
             options={{ headerShown: true, title: 'Job Detail', presentation: 'card' }}
           />
+          <Stack.Screen
+            name="dev-project/[id]"
+            options={{
+              headerShown: true,
+              title: 'Project',
+              presentation: 'card',
+              headerStyle: { backgroundColor: '#6d28d9' },
+              headerTintColor: '#fff',
+              headerTitleStyle: { fontWeight: '700' },
+            }}
+          />
         </Stack>
       </AuthProvider>
     </SafeAreaProvider>

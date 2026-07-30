@@ -152,3 +152,66 @@ export interface AuditLog {
   createdAt: string;
   user?: { fullName: string; email: string } | null;
 }
+
+// ── Dev projects ────────────────────────────────────────────────────────────
+
+export type DevProjectStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'PENDING' | 'COMPLETED';
+export type DevReportStatus = 'PENDING' | 'REVIEWED';
+
+export interface ChecklistItem {
+  label: string;
+  done: boolean;
+  /** ISO timestamp of when the item was ticked; null while unticked. */
+  doneAt?: string | null;
+  /** Full name of whoever ticked it; null while unticked. */
+  doneBy?: string | null;
+  note?: string | null;
+}
+
+export interface DevProjectSession {
+  id: string;
+  startedAt: string;
+  endedAt: string | null;
+  minutes: number | null;
+}
+
+export interface DevReportFeedbackEntry {
+  id: string;
+  message: string;
+  createdAt: string;
+  author?: { fullName: string };
+}
+
+export interface DevProjectReport {
+  id: string;
+  authorId: string;
+  title: string;
+  comment: string | null;
+  checklist: ChecklistItem[];
+  status: DevReportStatus;
+  createdAt: string;
+  author?: { fullName: string };
+  taggedAdmin?: { fullName: string } | null;
+  feedback?: DevReportFeedbackEntry[];
+}
+
+export interface DevProject {
+  id: string;
+  name: string;
+  description: string | null;
+  developerId: string;
+  status: DevProjectStatus;
+  progressPercent: number;
+  totalMinutes: number;
+  /** Seconds banked by pauses within the current run (resets on start/stop). */
+  runSeconds: number;
+  targetHours: number | null;
+  projectStart: string | null;
+  projectDeadline: string | null;
+  /** Non-null only while the timer is actively running (null = paused). */
+  startedAt: string | null;
+  updatedAt: string;
+  developer?: { id: string; fullName: string };
+  sessions?: DevProjectSession[];
+  reports?: DevProjectReport[];
+}
