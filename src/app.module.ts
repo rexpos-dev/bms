@@ -6,6 +6,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { AppVersionModule } from './app-version.module';
 import { AuditLogsModule } from './audit-logs.module';
 import { EventsModule } from './events.module';
 import { NenposClientsModule } from './nenpos-clients.module';
@@ -76,6 +77,7 @@ import { WithdrawalsModule } from './withdrawals.module';
     DownloadLeadsModule,
     DevProjectsModule,
     NenposClientsModule,
+    AppVersionModule,
   ],
   providers: [
     {
