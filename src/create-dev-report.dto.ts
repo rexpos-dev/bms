@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 
@@ -14,6 +15,12 @@ export class ChecklistItemDto {
 
   @IsBoolean()
   done!: boolean;
+
+  /** Optional per-item note. `doneAt`/`doneBy` are stamped server-side. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 }
 
 export class CreateDevReportDto {

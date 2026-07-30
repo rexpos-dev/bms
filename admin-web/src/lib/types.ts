@@ -331,6 +331,11 @@ export type DevReportStatus = 'PENDING' | 'REVIEWED';
 export interface ChecklistItem {
   label: string;
   done: boolean;
+  /** ISO timestamp of when the item was ticked; null while unticked. */
+  doneAt?: string | null;
+  /** Full name of whoever ticked it; null while unticked. */
+  doneBy?: string | null;
+  note?: string | null;
 }
 
 export interface DevProjectSession {

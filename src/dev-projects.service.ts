@@ -14,8 +14,20 @@ import { NotificationsService } from './notifications.service';
 import { AddReportFeedbackDto } from './add-report-feedback.dto';
 import { CreateDevProjectDto } from './create-dev-project.dto';
 import { CreateDevReportDto } from './create-dev-report.dto';
+import { UpdateChecklistItemDto } from './update-checklist-item.dto';
 import { UpdateDevProjectDto } from './update-dev-project.dto';
 import { UpdateProgressDto } from './update-progress.dto';
+
+/** Shape of one entry in DevProjectReport.checklist (stored as JSON). */
+type StoredChecklistItem = {
+  label: string;
+  done: boolean;
+  /** ISO timestamp of when the item was last ticked; null while unticked. */
+  doneAt?: string | null;
+  /** Full name of whoever ticked it; null while unticked. */
+  doneBy?: string | null;
+  note?: string | null;
+};
 
 const INCLUDE_LIST = {
   developer: { select: { id: true, fullName: true } },
@@ -283,7 +295,7 @@ export class DevProjectsService {
   async addReport(
     id: string,
     dto: CreateDevReportDto,
-    user: { id: string; role: UserRole },
+    user: { id: string; role: UserRole; fullName: string },
   ) {
     const project = await this.findRaw(id);
     this.assertOwner(project, user);
@@ -292,13 +304,23 @@ export class DevProjectsService {
       await this.assertReviewer(dto.taggedAdminId);
     }
 
+    // Items posted already ticked get their completion stamp now.
+    const now = new Date().toISOString();
+    const checklist: StoredChecklistItem[] = dto.checklist.map((item) => ({
+      label: item.label,
+      done: item.done,
+      doneAt: item.done ? now : null,
+      doneBy: item.done ? user.fullName : null,
+      note: item.note?.trim() || null,
+    }));
+
     await this.prisma.devProjectReport.create({
       data: {
         projectId: id,
         authorId: user.id,
         title: dto.title,
         comment: dto.comment,
-        checklist: dto.checklist as unknown as Prisma.InputJsonValue,
+        checklist: checklist,
         taggedAdminId: dto.taggedAdminId,
       },
     });
@@ -314,6 +336,61 @@ export class DevProjectsService {
     }
 
     return this.findOne(id, user);
+  }
+
+  /**
+   * Tick/untick a single checklist item on an already-posted report, or set its
+   * note. Only the report's author (the developer) or a super admin may edit;
+   * the completion timestamp and name are recorded server-side.
+   */
+  async updateChecklistItem(
+    reportId: string,
+    dto: UpdateChecklistItemDto,
+    user: { id: string; role: UserRole; fullName: string },
+  ) {
+    const report = await this.prisma.devProjectReport.findUnique({
+      where: { id: reportId },
+    });
+    if (!report) {
+      throw new NotFoundException(`Report ${reportId} not found`);
+    }
+
+    if (user.role !== UserRole.SUPER_ADMIN && report.authorId !== user.id) {
+      throw new ForbiddenException(
+        'Only the report author can edit this checklist',
+      );
+    }
+
+    const items = (
+      Array.isArray(report.checklist) ? report.checklist : []
+    ) as StoredChecklistItem[];
+    const current = items[dto.index];
+    if (!current) {
+      throw new NotFoundException(`Checklist item ${dto.index} not found`);
+    }
+
+    const updated: StoredChecklistItem = { ...current };
+
+    if (dto.done !== undefined && dto.done !== current.done) {
+      updated.done = dto.done;
+      updated.doneAt = dto.done ? new Date().toISOString() : null;
+      updated.doneBy = dto.done ? user.fullName : null;
+    }
+
+    if (dto.note !== undefined) {
+      updated.note = dto.note.trim() || null;
+    }
+
+    const checklist = items.map((item, i) =>
+      i === dto.index ? updated : item,
+    );
+
+    await this.prisma.devProjectReport.update({
+      where: { id: reportId },
+      data: { checklist },
+    });
+
+    return this.findOne(report.projectId, user);
   }
 
   async addFeedback(

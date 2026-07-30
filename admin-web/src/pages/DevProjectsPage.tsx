@@ -7,7 +7,7 @@ import { Pagination, usePagination } from '../components/Pagination';
 import { ProgressBar } from '../components/ProgressBar';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuthStore } from '../lib/auth-store';
-import type { ChecklistItem, DevProject } from '../lib/types';
+import type { ChecklistItem, DevProject, DevProjectReport } from '../lib/types';
 
 const EMPTY_CREATE_FORM = { name: '', description: '', developerId: '', targetHours: '' };
 
@@ -192,7 +192,8 @@ export function DevProjectsPage() {
       api.post<DevProject>(`/dev-projects/${selectedId}/reports`, {
         title: reportForm.title.trim(),
         comment: reportForm.comment.trim() || undefined,
-        checklist: checklistItems,
+        // Only the fields the API accepts — doneAt/doneBy are stamped server-side.
+        checklist: checklistItems.map((item) => ({ label: item.label, done: item.done })),
         taggedAdminId: reportForm.taggedAdminId || undefined,
       }),
     onSuccess: (res) => {
@@ -202,6 +203,17 @@ export function DevProjectsPage() {
       setReportForm(EMPTY_REPORT_FORM);
       setChecklistItems([]);
       setChecklistInput('');
+    },
+  });
+
+  const updateChecklistItem = useMutation({
+    mutationFn: ({ reportId, index, done, note }: { reportId: string; index: number; done?: boolean; note?: string }) =>
+      api.patch<DevProject>(`/dev-projects/reports/${reportId}/checklist`, { index, done, note }),
+    onSuccess: (res) => {
+      // Update whichever dialog is currently open
+      if (selectedId) qc.setQueryData(['dev-projects', selectedId], res.data);
+      if (viewProgressId) qc.setQueryData(['dev-projects', viewProgressId], res.data);
+      invalidate();
     },
   });
 
@@ -227,6 +239,9 @@ export function DevProjectsPage() {
 
   const isOwner = !!selectedProject && selectedProject.developerId === user?.id;
   const canControl = !!selectedProject && isOwner;
+
+  /** The dev who posted a report keeps ticking its checklist; super admin can fix it. */
+  const canEditChecklist = (report: DevProjectReport) => isSuperAdmin || report.authorId === user?.id;
 
   const handleCreateSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -371,10 +386,12 @@ export function DevProjectsPage() {
       </Dialog>
 
       {/* ── View Progress Dialog (admin read-only) ── */}
-      <Dialog isOpen={!!viewProgressId} onClose={() => setViewProgressId(null)} title={viewProject?.name ?? 'Project Progress'} maxWidth={600}>
+      <Dialog isOpen={!!viewProgressId} onClose={() => setViewProgressId(null)} title={viewProject?.name ?? 'Project Progress'} maxWidth={1000}>
         {viewProgressQuery.isLoading && <p>Loading…</p>}
         {viewProject && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div className="dp-detail-grid">
+            {/* Left column — status, progress, timeframe, description */}
+            <section className="dp-detail-col" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
             {/* Status + progress */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -484,6 +501,10 @@ export function DevProjectsPage() {
                 </p>
               </div>
             )}
+            </section>
+
+            {/* Right column — session history + reports */}
+            <section className="dp-detail-col" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
             {/* Session history */}
             {viewProject.sessions && viewProject.sessions.length > 0 && (
@@ -528,14 +549,14 @@ export function DevProjectsPage() {
                           {report.taggedAdmin && <> · Tagged: {report.taggedAdmin.fullName}</>}
                         </div>
                         {report.checklist.length > 0 && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginBottom: '0.4rem' }}>
-                            {report.checklist.map((item, i) => (
-                              <label key={i} className="checklist-item" style={{ color: item.done ? 'var(--text)' : 'var(--text-muted)' }}>
-                                <input type="checkbox" checked={item.done} disabled readOnly />
-                                <span style={{ textDecoration: item.done ? 'line-through' : 'none' }}>{item.label}</span>
-                              </label>
-                            ))}
-                          </div>
+                          <ReportChecklist
+                            key={report.id}
+                            items={report.checklist}
+                            editable={canEditChecklist(report)}
+                            isPending={updateChecklistItem.isPending}
+                            onToggle={(index, done) => updateChecklistItem.mutate({ reportId: report.id, index, done })}
+                            onSaveNote={(index, note) => updateChecklistItem.mutate({ reportId: report.id, index, note })}
+                          />
                         )}
                         {report.comment && <div style={{ fontSize: '0.9rem', marginBottom: '0.4rem' }}><Linkify text={report.comment} /></div>}
                         {report.feedback && report.feedback.length > 0 && (
@@ -574,6 +595,7 @@ export function DevProjectsPage() {
                 </div>
               </div>
             )}
+            </section>
           </div>
         )}
       </Dialog>
@@ -696,14 +718,14 @@ export function DevProjectsPage() {
                       {report.taggedAdmin && <> · Tagged: {report.taggedAdmin.fullName}</>}
                     </div>
                     {report.checklist.length > 0 && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '0.4rem' }}>
-                        {report.checklist.map((item, i) => (
-                          <label key={i} className="checklist-item" style={{ color: item.done ? 'var(--text)' : 'var(--text-muted)' }}>
-                            <input type="checkbox" checked={item.done} disabled readOnly />
-                            <span style={{ textDecoration: item.done ? 'line-through' : 'none' }}>{item.label}</span>
-                          </label>
-                        ))}
-                      </div>
+                      <ReportChecklist
+                        key={report.id}
+                        items={report.checklist}
+                        editable={canEditChecklist(report)}
+                        isPending={updateChecklistItem.isPending}
+                        onToggle={(index, done) => updateChecklistItem.mutate({ reportId: report.id, index, done })}
+                        onSaveNote={(index, note) => updateChecklistItem.mutate({ reportId: report.id, index, note })}
+                      />
                     )}
                     {report.comment && <div style={{ fontSize: '0.9rem', marginBottom: '0.4rem' }}><Linkify text={report.comment} /></div>}
 
@@ -945,6 +967,115 @@ function TargetHoursEditor({ current, onSave, isPending }: {
         </button>
       )}
     </form>
+  );
+}
+
+// ── Report checklist (tickable after posting, with completion date + note) ────
+
+/**
+ * Renders a posted report's checklist. When `editable`, the report's author (or
+ * a super admin) can tick items off and attach a short note; the tick date and
+ * who ticked it are stamped by the API and shown under each done item.
+ */
+function ReportChecklist({ items, editable, isPending, onToggle, onSaveNote }: {
+  items: ChecklistItem[];
+  editable: boolean;
+  isPending: boolean;
+  onToggle: (index: number, done: boolean) => void;
+  onSaveNote: (index: number, note: string) => void;
+}) {
+  const [noteIndex, setNoteIndex] = useState<number | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
+
+  const doneCount = items.filter((i) => i.done).length;
+
+  const startNote = (index: number, current: string | null | undefined) => {
+    setNoteIndex(index);
+    setNoteDraft(current ?? '');
+  };
+
+  return (
+    <div style={{ marginBottom: '0.5rem' }}>
+      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>
+        Checklist — {doneCount}/{items.length} done
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+        {items.map((item, i) => (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+            <label
+              className="checklist-item"
+              style={{ color: item.done ? 'var(--text)' : 'var(--text-muted)', cursor: editable ? 'pointer' : 'default' }}
+            >
+              <input
+                type="checkbox"
+                checked={item.done}
+                disabled={!editable || isPending}
+                readOnly={!editable}
+                onChange={editable ? () => onToggle(i, !item.done) : undefined}
+              />
+              <span style={{ flex: 1, textDecoration: item.done ? 'line-through' : 'none' }}>{item.label}</span>
+            </label>
+
+            {/* Completion stamp + note, indented under the label */}
+            <div style={{ paddingLeft: '1.6rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+              {item.done && item.doneAt && (
+                <div style={{ fontSize: '0.7rem', color: 'var(--success)' }}>
+                  ✓ {new Date(item.doneAt).toLocaleString()}
+                  {item.doneBy && <span style={{ color: 'var(--text-muted)' }}> · {item.doneBy}</span>}
+                </div>
+              )}
+
+              {noteIndex === i ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    onSaveNote(i, noteDraft);
+                    setNoteIndex(null);
+                  }}
+                  style={{ display: 'flex', gap: '0.3rem', marginTop: '0.1rem' }}
+                >
+                  <input
+                    autoFocus
+                    value={noteDraft}
+                    maxLength={500}
+                    onChange={(e) => setNoteDraft(e.target.value)}
+                    placeholder="Note for this item…"
+                    style={{ flex: 1, fontSize: '0.78rem', padding: '0.2rem 0.4rem' }}
+                  />
+                  <button type="submit" className="btn btn-primary" disabled={isPending} style={{ fontSize: '0.72rem', padding: '0.15rem 0.5rem' }}>
+                    {isPending ? 'Saving…' : 'Save'}
+                  </button>
+                  <button type="button" className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '0.15rem 0.5rem' }}
+                    onClick={() => setNoteIndex(null)}>
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  {item.note && (
+                    <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                      “{item.note}”
+                    </span>
+                  )}
+                  {editable && (
+                    <button
+                      type="button"
+                      onClick={() => startNote(i, item.note)}
+                      style={{
+                        background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                        fontSize: '0.7rem', color: 'var(--accent)', textDecoration: 'underline',
+                      }}
+                    >
+                      {item.note ? 'Edit note' : 'Add note'}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

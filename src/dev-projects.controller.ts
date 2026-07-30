@@ -16,6 +16,7 @@ import { RolesGuard } from './roles.guard';
 import { AddReportFeedbackDto } from './add-report-feedback.dto';
 import { CreateDevProjectDto } from './create-dev-project.dto';
 import { CreateDevReportDto } from './create-dev-report.dto';
+import { UpdateChecklistItemDto } from './update-checklist-item.dto';
 import { UpdateDevProjectDto } from './update-dev-project.dto';
 import { UpdateProgressDto } from './update-progress.dto';
 import { DevProjectsService } from './dev-projects.service';
@@ -112,6 +113,16 @@ export class DevProjectsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.devProjectsService.addReport(id, dto, user);
+  }
+
+  @Roles(UserRole.DEVELOPER, UserRole.SUPER_ADMIN)
+  @Patch('reports/:reportId/checklist')
+  updateChecklistItem(
+    @Param('reportId') reportId: string,
+    @Body() dto: UpdateChecklistItemDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.devProjectsService.updateChecklistItem(reportId, dto, user);
   }
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
