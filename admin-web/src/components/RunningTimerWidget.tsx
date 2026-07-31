@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
@@ -129,22 +129,35 @@ export function RunningTimerWidget() {
     return () => clearInterval(t);
   }, [active?.startedAt]);
 
-  // Keep the card inside the viewport when the window resizes.
-  useEffect(() => {
-    const clamp = () =>
-      setPos((p) => {
-        if (!p) return p;
-        const rect = cardRef.current?.getBoundingClientRect();
-        const w = rect?.width ?? 320;
-        const h = rect?.height ?? 120;
-        return {
-          x: Math.min(Math.max(0, p.x), Math.max(0, window.innerWidth - w)),
-          y: Math.min(Math.max(0, p.y), Math.max(0, window.innerHeight - h)),
-        };
-      });
-    window.addEventListener('resize', clamp);
-    return () => window.removeEventListener('resize', clamp);
+  /**
+   * Pull the card back inside the viewport. A position saved on a wider window
+   * (or at a larger scale) would otherwise place it off-screen, where it stays
+   * invisible forever — resize alone never fires on a fresh page load.
+   */
+  const clampIntoView = useCallback(() => {
+    setPos((p) => {
+      if (!p) return p;
+      const rect = cardRef.current?.getBoundingClientRect();
+      const w = rect?.width ?? 320;
+      const h = rect?.height ?? 120;
+      const x = Math.min(Math.max(0, p.x), Math.max(0, window.innerWidth - w));
+      const y = Math.min(Math.max(0, p.y), Math.max(0, window.innerHeight - h));
+      if (x === p.x && y === p.y) return p;
+      localStorage.setItem(POS_KEY, JSON.stringify({ x, y }));
+      return { x, y };
+    });
   }, []);
+
+  useEffect(() => {
+    window.addEventListener('resize', clampIntoView);
+    return () => window.removeEventListener('resize', clampIntoView);
+  }, [clampIntoView]);
+
+  // After every render that changes the card's size or brings it back on
+  // screen, so the clamp measures the size actually being displayed.
+  useLayoutEffect(() => {
+    clampIntoView();
+  }, [clampIntoView, active?.id, minimized, scale]);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['dev-active'] });

@@ -66,7 +66,7 @@ Edit `mobile/eas.json` so the `production-apk` profile reads exactly:
 
 ```json
     "production-apk": {
-      "autoIncrement": "versionCode",
+      "autoIncrement": true,
       "android": {
         "buildType": "apk"
       },
