@@ -399,6 +399,16 @@ export interface ResetModuleInfo {
   count: number;
 }
 
+export interface ItemCategory {
+  id: string;
+  name: string;
+  /** Null means this category's items appear in every job order type. */
+  jobOrderType: JobOrderType | null;
+  sortOrder: number;
+  active: boolean;
+  _count?: { items: number };
+}
+
 export interface InventoryItem {
   id: string;
   name: string;
@@ -409,6 +419,8 @@ export interface InventoryItem {
   lowStockAlert: number;
   sortOrder: number;
   active: boolean;
+  categoryId: string | null;
+  category?: ItemCategory | null;
   createdAt: string;
   updatedAt: string;
 }
