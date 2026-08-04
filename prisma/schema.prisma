@@ -465,6 +465,23 @@ model Payment {
 // Inventory (materials / hardware catalog with stock)
 // ---------------------------------------------------------------------------
 
+/** A user-managed grouping of inventory items. Each active row becomes a Products page tab. */
+model ItemCategory {
+  id           String        @id @default(uuid())
+  name         String        @unique
+  /** Which job order type this category's items belong to. Null = shows in every type. */
+  jobOrderType JobOrderType? @map("job_order_type")
+  sortOrder    Int           @default(0) @map("sort_order")
+  active       Boolean       @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items InventoryItem[]
+
+  @@map("item_categories")
+}
+
 model InventoryItem {
   id            String  @id @default(uuid())
   name          String
@@ -475,13 +492,16 @@ model InventoryItem {
   lowStockAlert Int     @default(0) @map("low_stock_alert")
   sortOrder     Int     @default(0) @map("sort_order")
   active        Boolean @default(true)
+  categoryId String? @map("category_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   jobOrderItems JobOrderItem[]
   movements     StockMovement[]
+  category ItemCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
+  @@index([categoryId])
   @@map("inventory_items")
 }
 
