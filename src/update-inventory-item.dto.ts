@@ -1,4 +1,4 @@
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Min, MinLength, ValidateIf } from 'class-validator';
 
 export class UpdateInventoryItemDto {
   @IsOptional()
@@ -36,4 +36,10 @@ export class UpdateInventoryItemDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  /** Null leaves the item uncategorised, which shows it in every job order type. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  categoryId?: string | null;
 }
