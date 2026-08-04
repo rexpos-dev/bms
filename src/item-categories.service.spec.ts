@@ -1,4 +1,5 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ItemCategoriesService } from './item-categories.service';
 
 function buildPrisma() {
@@ -38,6 +39,50 @@ describe('ItemCategoriesService.findAll', () => {
     expect(prisma.itemCategory.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: undefined }),
     );
+  });
+});
+
+describe('ItemCategoriesService.create', () => {
+  it('creates with the given name and trims surrounding whitespace', async () => {
+    const { prisma, service } = buildPrisma();
+
+    await service.create({ name: '  CCTV  ' } as never);
+
+    expect(prisma.itemCategory.create).toHaveBeenCalledWith({
+      data: { name: 'CCTV', jobOrderType: null, sortOrder: 0, active: true },
+    });
+  });
+
+  it('applies the defaults when the dto omits jobOrderType, sortOrder, and active', async () => {
+    const { prisma, service } = buildPrisma();
+
+    await service.create({ name: 'Cabling' } as never);
+
+    expect(prisma.itemCategory.create).toHaveBeenCalledWith({
+      data: { name: 'Cabling', jobOrderType: null, sortOrder: 0, active: true },
+    });
+  });
+
+  it('passes an explicit jobOrderType through unchanged', async () => {
+    const { prisma, service } = buildPrisma();
+
+    await service.create({ name: 'CCTV', jobOrderType: 'CCTV' } as never);
+
+    expect(prisma.itemCategory.create).toHaveBeenCalledWith({
+      data: { name: 'CCTV', jobOrderType: 'CCTV', sortOrder: 0, active: true },
+    });
+  });
+
+  it('maps a Prisma P2002 unique-constraint error to a ConflictException', async () => {
+    const { prisma, service } = buildPrisma();
+    prisma.itemCategory.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed on the fields: (`name`)', {
+        code: 'P2002',
+        clientVersion: '5.0.0',
+      }),
+    );
+
+    await expect(service.create({ name: 'CCTV' } as never)).rejects.toThrow(ConflictException);
   });
 });
 
