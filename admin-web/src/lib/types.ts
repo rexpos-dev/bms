@@ -155,6 +155,8 @@ export interface Withdrawal {
 export type DiscountType = 'FIXED' | 'PERCENTAGE';
 export type JobOrderStatus = 'DRAFT' | 'FINALIZED' | 'ON_GOING' | 'COMPLETED' | 'CANCELLED';
 
+export type WarrantyTier = 'MAIN_SET' | 'ACCESSORY' | 'NONE';
+
 export interface JobOrderItem {
   id: string;
   jobOrderId: string;
