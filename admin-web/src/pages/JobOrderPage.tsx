@@ -34,10 +34,11 @@ import { api, fileUrl } from '../lib/api';
 import { Dialog } from '../components/Dialog';
 import { JobOrderPayments } from '../components/JobOrderPayments';
 import { useAuthStore } from '../lib/auth-store';
-import type { AuthenticatedUser, Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderStatus, JobOrderType, SoftwareProduct, WarrantyTier } from '../lib/types';
+import type { AgreementVersion, AuthenticatedUser, Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderStatus, JobOrderType, SoftwareProduct, WarrantyTier } from '../lib/types';
 import { DOC_META, DOC_TYPES } from '../components/print/doc-types';
 import type { DocumentType as DocType } from '../lib/types';
 import { PrintTemplate, type LineItem } from '../components/print/PrintTemplate';
+import { ServiceAgreement } from '../components/print/ServiceAgreement';
 
 // Quick-add materials now come from the Inventory (Settings → Inventory Management).
 
@@ -324,6 +325,10 @@ export function JobOrderPage() {
     queryKey: ['company-profile'],
     queryFn: async () => (await api.get<CompanyProfile>('/company-profile')).data,
   });
+  const agreementTemplateQuery = useQuery({
+    queryKey: ['agreement-template'],
+    queryFn: async () => (await api.get<AgreementVersion | null>('/agreement-template')).data,
+  });
 
   // Preload the company logo as a base64 data URL so it embeds reliably in the
   // downloaded PDF (html2canvas cannot capture not-yet-loaded / tainted images).
@@ -359,6 +364,7 @@ export function JobOrderPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [customForm, setCustomForm] = useState({ name: '', description: '', quantity: 1, unitPrice: 0, warrantyTier: 'ACCESSORY' as WarrantyTier });
   const [showCustomForm, setShowCustomForm] = useState(false);
+  const [includeAgreement, setIncludeAgreement] = useState(false);
 
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClientForm, setNewClientForm] = useState({
@@ -385,6 +391,7 @@ export function JobOrderPage() {
     setCameraRate(jo.cameraRate != null ? Number(jo.cameraRate) : 0);
     setLaborPct(jo.laborPct != null ? Number(jo.laborPct) : 20);
     setDocType(jo.docType ?? 'JOB_ORDER');
+    setIncludeAgreement(jo.includeAgreement ?? false);
   }, [jobOrderQuery.data]);
 
   // ── Auto-populate from parent record ──
@@ -426,12 +433,14 @@ export function JobOrderPage() {
           cameraRate: joType === 'CCTV' ? cameraRate : undefined,
           laborPct: joType === 'SIGNAGE' ? laborPct : undefined,
           docType: doc ?? docType,
-          items: items.map(({ name, description, quantity, unitPrice, inventoryItemId }) => ({
+          includeAgreement,
+          items: items.map(({ name, description, quantity, unitPrice, inventoryItemId, warrantyTier }) => ({
             name,
             description: description || undefined,
             quantity,
             unitPrice,
             inventoryItemId: inventoryItemId ?? undefined,
+            warrantyTier,
           })),
         })
       ).data,
@@ -444,6 +453,11 @@ export function JobOrderPage() {
         navigate(`/job-orders/order/${data.id}`, { replace: true });
       }
     },
+  });
+
+  const unpin = useMutation({
+    mutationFn: async () => api.delete(`/job-orders/${jo?.id}/pin-agreement`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['job-order', jobId ?? standaloneId] }),
   });
 
   // ── Convert standalone quotation → job order ──
@@ -553,6 +567,18 @@ export function JobOrderPage() {
 
   const canSave = !!clientId && (joType === 'SOFTWARE' ? !!productId : true);
 
+  // The search box doubles as a filter: an unmatched barcode still submits on
+  // Enter, so filtering the buttons costs nothing.
+  const itemQuery = scanCode.trim().toLowerCase();
+  const quickAddItems = (inventoryQuery.data ?? []).filter((i) =>
+    itemQuery ? i.name.toLowerCase().includes(itemQuery) : true,
+  );
+
+  // A printed order reproduces the version it was pinned to; an unprinted one
+  // follows the current template.
+  const agreementSections =
+    jo?.agreementVersion?.sections ?? agreementTemplateQuery.data?.sections ?? [];
+
   // Payments require a saved order; fall back to step 2 if the order vanishes.
   const effectiveStep = step === 3 && !jo?.id ? 2 : step;
 
@@ -562,10 +588,25 @@ export function JobOrderPage() {
     : 0;
   const installerName = parent?.installer?.fullName;
 
+  /**
+   * Locks the agreement text to the current template the first time it reaches
+   * paper. A failure here must not stop the print — the pin retries next time.
+   */
+  const pinAgreement = async (id: string | undefined) => {
+    if (!includeAgreement || !id) return;
+    try {
+      await api.post(`/job-orders/${id}/pin-agreement`);
+      queryClient.invalidateQueries({ queryKey: ['job-order', jobId ?? standaloneId] });
+    } catch {
+      // Ignored on purpose — see the doc comment.
+    }
+  };
+
   const handlePrint = async () => {
     if (!canSave) return;
     // Save first so the print reflects the latest state
-    await upsert.mutateAsync({ status: jo?.status ?? 'DRAFT' });
+    const saved = await upsert.mutateAsync({ status: jo?.status ?? 'DRAFT' });
+    await pinAgreement(saved.id);
     window.print();
   };
 
@@ -584,20 +625,26 @@ export function JobOrderPage() {
     const element = document.getElementById('job-order-print');
     if (!element) return;
     if (canSave) {
-      await upsert.mutateAsync({ status: jo?.status ?? 'DRAFT' });
+      const saved = await upsert.mutateAsync({ status: jo?.status ?? 'DRAFT' });
+      await pinAgreement(saved.id);
     }
     setIsDownloading(true);
     const filename = `${DOC_META[docType].filePrefix}-${jo?.id.slice(0, 8).toUpperCase() ?? 'NEW'}.pdf`;
     element.style.display = 'block';
     try {
       await inlineImages(element);
-      await html2pdf().set({
-        margin: [10, 10],
+      // Assigned to a variable rather than inlined so `pagebreak` (supported by
+      // html2pdf.js at runtime, but missing from its shipped .d.ts) type-checks
+      // structurally instead of tripping the object-literal excess-property check.
+      const pdfOptions = {
+        margin: [10, 10] as [number, number],
         filename,
-        image: { type: 'jpeg', quality: 0.98 },
+        image: { type: 'jpeg' as const, quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      }).from(element).save();
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
+        pagebreak: { mode: ['css', 'legacy'] },
+      };
+      await html2pdf().set(pdfOptions).from(element).save();
     } finally {
       element.style.display = 'none';
       setIsDownloading(false);
@@ -680,6 +727,24 @@ export function JobOrderPage() {
           companyWebsite={companyProfileQuery.data?.website ?? undefined}
           companyTin={companyProfileQuery.data?.tin ?? undefined}
         />
+        {includeAgreement && agreementSections.length > 0 && (
+          <ServiceAgreement
+            sections={agreementSections}
+            values={{
+              date: jo?.createdAt,
+              clientName: client?.businessName,
+              clientAddress: client?.address,
+              clientOwner: client?.ownerName,
+              companyName: companyProfileQuery.data?.businessName,
+              companyAddress: companyProfileQuery.data?.address,
+              items: items.map((i) => ({
+                name: i.name,
+                quantity: i.quantity,
+                warrantyTier: i.warrantyTier,
+              })),
+            }}
+          />
+        )}
       </div>
 
       {/* ── Screen layout ───────────────────────────────────────────────────── */}
@@ -737,6 +802,20 @@ export function JobOrderPage() {
             >
               Finalize
             </button>
+            <label
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}
+              title="Appends the Service Level Agreement pages to the printed document"
+            >
+              <input
+                type="checkbox"
+                checked={includeAgreement}
+                onChange={(e) => setIncludeAgreement(e.target.checked)}
+              />
+              Include Service Agreement
+              {includeAgreement && items.length === 0 && (
+                <span style={{ color: 'var(--danger)' }}>— no materials, warranty lists will be empty</span>
+              )}
+            </label>
             <button
               type="button"
               className="btn btn-secondary"
@@ -757,6 +836,25 @@ export function JobOrderPage() {
             </button>
           </div>
         </div>
+
+        {jo?.agreementVersion && (
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>
+              Agreement locked to v{jo.agreementVersion.versionNo} ·{' '}
+              {new Date(jo.agreementVersion.createdAt).toLocaleDateString()}
+            </span>
+            {role === 'SUPER_ADMIN' && (
+              <button
+                type="button"
+                onClick={() => unpin.mutate()}
+                disabled={unpin.isPending}
+                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}
+              >
+                {unpin.isPending ? 'Unlocking…' : 'Unlock'}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Parent info banner */}
         {parent && (
@@ -885,21 +983,13 @@ export function JobOrderPage() {
 
               {/* Preset quick-add buttons (from Inventory) + barcode scan */}
               <div style={{ marginBottom: '1rem' }}>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>
-                  Quick Add
-                </div>
-
-                {/* Barcode scan-to-add */}
-                <form onSubmit={handleScan} style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem', maxWidth: 340 }}>
+                <form onSubmit={handleScan} style={{ marginBottom: '0.75rem' }}>
                   <input
                     value={scanCode}
+                    placeholder="Search items, or scan a barcode and press Enter"
+                    style={{ width: '100%' }}
                     onChange={(e) => { setScanCode(e.target.value); setScanError(''); }}
-                    placeholder="Scan or type barcode, then Enter"
-                    style={{ flex: 1, fontSize: '0.82rem' }}
                   />
-                  <button type="submit" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }}>
-                    Add
-                  </button>
                 </form>
                 {scanError && <p className="error-text" style={{ marginTop: 0 }}>{scanError}</p>}
 
@@ -910,7 +1000,7 @@ export function JobOrderPage() {
                   </p>
                 )}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                  {inventoryQuery.data?.map((item) => (
+                  {quickAddItems.map((item) => (
                     <button
                       key={item.id}
                       type="button"
@@ -933,17 +1023,20 @@ export function JobOrderPage() {
                 <table style={{ marginBottom: '0.75rem' }}>
                   <thead>
                     <tr>
+                      <th style={{ width: 44 }}>#</th>
                       <th>Item</th>
                       <th>Description</th>
+                      {includeAgreement && <th style={{ width: 130 }}>Warranty</th>}
                       <th style={{ width: 60 }}>Qty</th>
-                      <th style={{ width: 120 }}>Unit Price (₱)</th>
-                      <th style={{ width: 100 }}>Subtotal</th>
+                      <th style={{ width: 120 }}>Price</th>
+                      <th style={{ width: 100 }}>Total</th>
                       <th style={{ width: 36 }}></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item) => (
+                    {items.map((item, index) => (
                       <tr key={item._key}>
+                        <td style={{ color: 'var(--text-muted)', textAlign: 'center' }}>{index + 1}</td>
                         <td>
                           <input
                             value={item.name}
@@ -958,6 +1051,19 @@ export function JobOrderPage() {
                             onChange={(e) => updateItem(item._key, { description: e.target.value })}
                           />
                         </td>
+                        {includeAgreement && (
+                          <td>
+                            <select
+                              value={item.warrantyTier}
+                              style={{ width: '100%', border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', fontSize: '0.85rem' }}
+                              onChange={(e) => updateItem(item._key, { warrantyTier: e.target.value as WarrantyTier })}
+                            >
+                              <option value="MAIN_SET">Main set</option>
+                              <option value="ACCESSORY">Accessory</option>
+                              <option value="NONE">Not covered</option>
+                            </select>
+                          </td>
+                        )}
                         <td>
                           <input
                             type="number"
@@ -994,12 +1100,6 @@ export function JobOrderPage() {
                     ))}
                   </tbody>
                 </table>
-              )}
-
-              {items.length === 0 && (
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                  No materials added yet. Use the Quick Add buttons above or add a custom item below.
-                </p>
               )}
 
               {!showCustomForm && (
