@@ -14,7 +14,17 @@ export interface ServiceAgreementProps {
 const ROMAN = ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix', 'x'];
 
 const S = {
-  page: { fontFamily: 'Arial, sans-serif', color: '#000', fontSize: '11pt', lineHeight: 1.5 },
+  page: {
+    fontFamily: 'Arial, sans-serif',
+    color: '#000',
+    fontSize: '11pt',
+    lineHeight: 1.5,
+    // Inline rather than in the print stylesheet: html2pdf reads computed
+    // styles from the live screen document, where an @media print rule is
+    // invisible. Without this the PDF starts the agreement mid-page.
+    pageBreakBefore: 'always' as const,
+    breakBefore: 'page' as const,
+  },
   title: { fontSize: '14pt', fontWeight: 'bold' as const, textAlign: 'center' as const, marginBottom: '14pt' },
   heading: { fontWeight: 'bold' as const, fontSize: '11.5pt', marginTop: '12pt', marginBottom: '4pt' },
   para: { marginBottom: '8pt', textAlign: 'justify' as const },

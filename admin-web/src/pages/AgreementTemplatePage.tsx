@@ -23,6 +23,7 @@ export function AgreementTemplatePage() {
   const [sections, setSections] = useState<SectionRow[] | null>(null);
   const [note, setNote] = useState('');
   const [saved, setSaved] = useState(false);
+  const [noChanges, setNoChanges] = useState(false);
   const [copied, setCopied] = useState('');
 
   const templateQuery = useQuery({
@@ -62,6 +63,14 @@ export function AgreementTemplatePage() {
       qc.invalidateQueries({ queryKey: ['agreement-template'] });
       qc.invalidateQueries({ queryKey: ['agreement-versions'] });
       setSections(data.sections.map((s) => ({ heading: s.heading, body: s.body })));
+      // Identical sections mean the backend returned the existing version
+      // instead of minting a new one — the note was never persisted, so
+      // clearing it here would silently discard what the user typed.
+      if (templateQuery.data && data.id === templateQuery.data.id) {
+        setNoChanges(true);
+        setTimeout(() => setNoChanges(false), 2500);
+        return;
+      }
       setNote('');
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -244,6 +253,7 @@ export function AgreementTemplatePage() {
             {save.isPending ? 'Saving…' : 'Save as new version'}
           </button>
           {saved && <span style={{ color: 'var(--success)', fontSize: '0.85rem' }}>Saved.</span>}
+          {noChanges && <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No changes to save.</span>}
           {save.isError && <span style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>Could not save.</span>}
         </div>
       )}

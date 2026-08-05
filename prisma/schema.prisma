@@ -432,6 +432,7 @@ model JobOrder {
   payments         Payment[]
   agreementVersion AgreementVersion? @relation(fields: [agreementVersionId], references: [id], onDelete: Restrict)
 
+  @@index([agreementVersionId])
   @@map("job_orders")
 }
 

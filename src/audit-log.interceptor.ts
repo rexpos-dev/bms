@@ -25,6 +25,7 @@ const RESOURCE_NAMES: Record<string, string> = {
   kpis: 'KPI',
   'company-profile': 'Company Profile',
   backups: 'Backup',
+  'agreement-template': 'Agreement Template',
 };
 
 const ACTION_VERBS: Record<string, string> = {
@@ -138,6 +139,9 @@ export class AuditLogInterceptor implements NestInterceptor {
     if (url.includes('/auth/login')) return 'User Login';
     if (url.includes('/auth/logout')) return 'User Logout';
     if (url.includes('/auth/refresh')) return 'Token Refresh';
+    if (url.includes('/pin-agreement')) {
+      return method === 'DELETE' ? 'Unlocked Job Order Agreement' : 'Pinned Job Order Agreement';
+    }
 
     const parts = url.split('/').filter(p => p && p !== 'api');
     const resourcePath = parts[0] || 'unknown';

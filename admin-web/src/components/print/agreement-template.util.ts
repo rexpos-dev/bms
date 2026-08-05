@@ -62,7 +62,7 @@ export const KNOWN_TOKENS: readonly string[] = [
 
 const BOLD_TOKENS: readonly string[] = ['client_name', 'company_name', 'package_label'];
 
-const TOKEN_RE = /\{\{\s*([a-z_]+)\s*\}\}/g;
+const TOKEN_RE = /\{\{\s*([A-Za-z0-9_-]+)\s*\}\}/g;
 
 /** A list token alone on its line expands to a block rather than inline text. */
 const LIST_LINE_RE = /^\{\{\s*(main_set_items|accessory_items)\s*\}\}$/;

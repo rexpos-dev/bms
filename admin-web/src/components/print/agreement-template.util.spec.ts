@@ -130,6 +130,20 @@ describe('unknown tokens', () => {
   it('findUnknownTokens returns nothing for a clean template', () => {
     expect(findUnknownTokens([{ heading: 'B', body: '{{client_name}} {{date}}' }])).toEqual([]);
   });
+
+  it('reports a mixed-case token as unknown and renders it verbatim', () => {
+    expect(flat(one('hello {{Client_Name}}'))).toBe('hello {{Client_Name}}');
+    expect(findUnknownTokens([{ heading: 'B', body: '{{Client_Name}}' }])).toEqual([
+      { sectionIndex: 0, heading: 'B', token: '{{Client_Name}}' },
+    ]);
+  });
+
+  it('reports a hyphenated token as unknown and renders it verbatim', () => {
+    expect(flat(one('hello {{client-name}}'))).toBe('hello {{client-name}}');
+    expect(findUnknownTokens([{ heading: 'B', body: '{{client-name}}' }])).toEqual([
+      { sectionIndex: 0, heading: 'B', token: '{{client-name}}' },
+    ]);
+  });
 });
 
 describe('paragraphs and line breaks', () => {
