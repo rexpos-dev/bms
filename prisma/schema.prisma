@@ -430,7 +430,7 @@ model JobOrder {
   product          SoftwareProduct?  @relation(fields: [productId], references: [id])
   items            JobOrderItem[]
   payments         Payment[]
-  agreementVersion AgreementVersion? @relation(fields: [agreementVersionId], references: [id])
+  agreementVersion AgreementVersion? @relation(fields: [agreementVersionId], references: [id], onDelete: Restrict)
 
   @@map("job_orders")
 }
@@ -443,8 +443,8 @@ model JobOrderItem {
   quantity    Int     @default(1)
   unitPrice   Decimal @map("unit_price") @db.Decimal(12, 2)
 
-  inventoryItemId String? @map("inventory_item_id")
-  warrantyTier WarrantyTier @default(ACCESSORY) @map("warranty_tier")
+  inventoryItemId String?      @map("inventory_item_id")
+  warrantyTier    WarrantyTier @default(ACCESSORY) @map("warranty_tier")
 
   createdAt DateTime @default(now()) @map("created_at")
 
