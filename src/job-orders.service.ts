@@ -11,6 +11,13 @@ const INCLUDE_FULL = {
   product: true,
   job: { include: { installer: true } },
   items: { orderBy: { createdAt: 'asc' as const } },
+};
+
+// Split from INCLUDE_FULL because findAll() shares that shape for the job
+// order list: embedding the full agreement text there would put several
+// kilobytes of legal prose on every row of a response that never displays it.
+const INCLUDE_WITH_AGREEMENT = {
+  ...INCLUDE_FULL,
   agreementVersion: { include: { sections: { orderBy: { sortOrder: 'asc' as const } } } },
 };
 
@@ -107,7 +114,7 @@ export class JobOrdersService {
   async findByJob(jobId: string) {
     const jobOrder = await this.prisma.jobOrder.findUnique({
       where: { jobId },
-      include: INCLUDE_FULL,
+      include: INCLUDE_WITH_AGREEMENT,
     });
     return jobOrder;
   }
@@ -115,7 +122,7 @@ export class JobOrdersService {
   async findOne(id: string) {
     const jobOrder = await this.prisma.jobOrder.findUnique({
       where: { id },
-      include: INCLUDE_FULL,
+      include: INCLUDE_WITH_AGREEMENT,
     });
     if (!jobOrder) throw new NotFoundException(`Job order ${id} not found`);
     return jobOrder;

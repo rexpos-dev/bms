@@ -36,6 +36,7 @@ function buildService(tx: ReturnType<typeof buildTx>) {
   const prisma = {
     jobOrder: {
       findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({}),
     },
     agreementVersion: { findFirst: jest.fn() },
@@ -263,5 +264,44 @@ describe('JobOrdersService.unpinAgreement', () => {
     prisma.jobOrder.findUnique.mockResolvedValue(null);
 
     await expect(service.unpinAgreement('nope')).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('JobOrdersService include shapes', () => {
+  it('findAll does not request the agreement version, since it backs the list page', async () => {
+    const tx = buildTx();
+    const { service, prisma } = buildService(tx);
+
+    await service.findAll();
+
+    expect(prisma.jobOrder.findMany).toHaveBeenCalledTimes(1);
+    const include = prisma.jobOrder.findMany.mock.calls[0][0].include;
+    expect(include.agreementVersion).toBeUndefined();
+  });
+
+  it('findOne requests the agreement version with sections ordered by sortOrder asc', async () => {
+    const tx = buildTx();
+    const { service, prisma } = buildService(tx);
+    prisma.jobOrder.findUnique.mockResolvedValue({ id: 'jo-1' });
+
+    await service.findOne('jo-1');
+
+    const include = prisma.jobOrder.findUnique.mock.calls[0][0].include;
+    expect(include.agreementVersion).toEqual({
+      include: { sections: { orderBy: { sortOrder: 'asc' } } },
+    });
+  });
+
+  it('findByJob requests the agreement version with sections ordered by sortOrder asc', async () => {
+    const tx = buildTx();
+    const { service, prisma } = buildService(tx);
+    prisma.jobOrder.findUnique.mockResolvedValue({ id: 'jo-1' });
+
+    await service.findByJob('job-1');
+
+    const include = prisma.jobOrder.findUnique.mock.calls[0][0].include;
+    expect(include.agreementVersion).toEqual({
+      include: { sections: { orderBy: { sortOrder: 'asc' } } },
+    });
   });
 });
