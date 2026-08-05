@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import type { AgreementVersion } from '../lib/types';
+import type { AgreementVersion, AgreementVersionSummary } from '../lib/types';
 import { KNOWN_TOKENS, findUnknownTokens } from '../components/print/agreement-template.util';
 
 type SectionRow = { heading: string; body: string };
@@ -28,6 +28,20 @@ export function AgreementTemplatePage() {
   const templateQuery = useQuery({
     queryKey: ['agreement-template'],
     queryFn: async () => (await api.get<AgreementVersion | null>('/agreement-template')).data,
+  });
+
+  /** Null means editing the current version; an id means viewing an old one read-only. */
+  const [viewingId, setViewingId] = useState<string | null>(null);
+
+  const versionsQuery = useQuery({
+    queryKey: ['agreement-versions'],
+    queryFn: async () => (await api.get<AgreementVersionSummary[]>('/agreement-template/versions')).data,
+  });
+
+  const viewingQuery = useQuery({
+    queryKey: ['agreement-version', viewingId],
+    queryFn: async () => (await api.get<AgreementVersion>(`/agreement-template/versions/${viewingId}`)).data,
+    enabled: !!viewingId,
   });
 
   useEffect(() => {
@@ -59,6 +73,12 @@ export function AgreementTemplatePage() {
   }
 
   const unknown = findUnknownTokens(sections);
+
+  const viewing = viewingId ? viewingQuery.data : null;
+  const shown: SectionRow[] = viewing
+    ? viewing.sections.map((s) => ({ heading: s.heading, body: s.body }))
+    : sections;
+  const readOnly = !!viewingId;
 
   const update = (index: number, patch: Partial<SectionRow>) =>
     setSections(sections.map((s, i) => (i === index ? { ...s, ...patch } : s)));
@@ -129,39 +149,76 @@ export function AgreementTemplatePage() {
         </p>
       </div>
 
-      {sections.map((section, i) => (
+      {viewing && (
+        <div
+          className="card"
+          style={{ borderColor: 'var(--accent)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}
+        >
+          <span style={{ fontSize: '0.85rem' }}>
+            Viewing <strong>v{viewing.versionNo}</strong> from{' '}
+            {new Date(viewing.createdAt).toLocaleDateString()} — read only.
+          </span>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ fontSize: '0.8rem' }}
+            onClick={() => {
+              // Restore is an ordinary edit: it loads the old text into the
+              // editor, and saving mints the next version from it.
+              setSections(viewing.sections.map((s) => ({ heading: s.heading, body: s.body })));
+              setNote(`Restored from v${viewing.versionNo}`);
+              setViewingId(null);
+            }}
+          >
+            Restore into the editor
+          </button>
+          <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => setViewingId(null)}>
+            Back to current
+          </button>
+        </div>
+      )}
+
+      {shown.map((section, i) => (
         <div className="card" key={i} style={{ marginBottom: '0.75rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
             <input
               value={section.heading}
               placeholder="Heading — leave empty for the preamble or signature block"
               style={{ flex: 1, fontWeight: 600 }}
+              disabled={readOnly}
               onChange={(e) => update(i, { heading: e.target.value })}
             />
-            <button type="button" className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.5rem' }} onClick={() => move(i, -1)} disabled={i === 0} title="Move up">↑</button>
-            <button type="button" className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.5rem' }} onClick={() => move(i, 1)} disabled={i === sections.length - 1} title="Move down">↓</button>
-            <button
-              type="button"
-              onClick={() => remove(i)}
-              disabled={sections.length === 1}
-              title={sections.length === 1 ? 'The agreement needs at least one section' : 'Remove section'}
-              style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '1.1rem' }}
-            >×</button>
+            {!readOnly && (
+              <>
+                <button type="button" className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.5rem' }} onClick={() => move(i, -1)} disabled={i === 0} title="Move up">↑</button>
+                <button type="button" className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.5rem' }} onClick={() => move(i, 1)} disabled={i === shown.length - 1} title="Move down">↓</button>
+                <button
+                  type="button"
+                  onClick={() => remove(i)}
+                  disabled={sections.length === 1}
+                  title={sections.length === 1 ? 'The agreement needs at least one section' : 'Remove section'}
+                  style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '1.1rem' }}
+                >×</button>
+              </>
+            )}
           </div>
           <textarea
             value={section.body}
             rows={Math.min(20, Math.max(4, section.body.split('\n').length + 1))}
             style={{ width: '100%', fontFamily: 'inherit', fontSize: '0.85rem', lineHeight: 1.5 }}
+            disabled={readOnly}
             onChange={(e) => update(i, { body: e.target.value })}
           />
         </div>
       ))}
 
-      <button type="button" className="btn btn-secondary" style={{ fontSize: '0.85rem' }} onClick={add}>
-        + Add section
-      </button>
+      {!readOnly && (
+        <button type="button" className="btn btn-secondary" style={{ fontSize: '0.85rem' }} onClick={add}>
+          + Add section
+        </button>
+      )}
 
-      {unknown.length > 0 && (
+      {!readOnly && unknown.length > 0 && (
         <div className="card" style={{ borderColor: 'var(--danger)', marginTop: '1rem' }}>
           <strong style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>Unknown placeholders</strong>
           <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem', fontSize: '0.82rem' }}>
@@ -175,19 +232,60 @@ export function AgreementTemplatePage() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginTop: '1.25rem', flexWrap: 'wrap' }}>
-        <input
-          value={note}
-          placeholder="What changed? (optional)"
-          style={{ flex: 1, minWidth: 220 }}
-          onChange={(e) => setNote(e.target.value)}
-        />
-        <button type="submit" className="btn btn-primary" disabled={save.isPending}>
-          {save.isPending ? 'Saving…' : 'Save as new version'}
-        </button>
-        {saved && <span style={{ color: 'var(--success)', fontSize: '0.85rem' }}>Saved.</span>}
-        {save.isError && <span style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>Could not save.</span>}
-      </div>
+      {!readOnly && (
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginTop: '1.25rem', flexWrap: 'wrap' }}>
+          <input
+            value={note}
+            placeholder="What changed? (optional)"
+            style={{ flex: 1, minWidth: 220 }}
+            onChange={(e) => setNote(e.target.value)}
+          />
+          <button type="submit" className="btn btn-primary" disabled={save.isPending}>
+            {save.isPending ? 'Saving…' : 'Save as new version'}
+          </button>
+          {saved && <span style={{ color: 'var(--success)', fontSize: '0.85rem' }}>Saved.</span>}
+          {save.isError && <span style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>Could not save.</span>}
+        </div>
+      )}
+
+      <h3 style={{ marginTop: '2rem', marginBottom: '0.5rem', fontSize: '1rem' }}>Version history</h3>
+      <table style={{ fontSize: '0.85rem' }}>
+        <thead>
+          <tr>
+            <th style={{ width: 70 }}>Version</th>
+            <th style={{ width: 120 }}>Date</th>
+            <th style={{ width: 160 }}>By</th>
+            <th>Note</th>
+            <th style={{ width: 90, textAlign: 'right' }}>Job orders</th>
+            <th style={{ width: 70 }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {(versionsQuery.data ?? []).map((v, i) => (
+            <tr key={v.id}>
+              <td>
+                v{v.versionNo}
+                {i === 0 && <span style={{ color: 'var(--success)', fontSize: '0.75rem' }}> current</span>}
+              </td>
+              <td style={{ whiteSpace: 'nowrap' }}>{new Date(v.createdAt).toLocaleDateString()}</td>
+              <td>{v.createdBy?.fullName ?? 'System'}</td>
+              <td style={{ color: 'var(--text-muted)' }}>{v.note ?? '—'}</td>
+              <td style={{ textAlign: 'right' }}>{v._count.jobOrders}</td>
+              <td>
+                {i === 0 ? null : (
+                  <button
+                    type="button"
+                    onClick={() => setViewingId(v.id)}
+                    style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}
+                  >
+                    View
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </form>
   );
 }
