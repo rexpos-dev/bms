@@ -237,7 +237,7 @@ export function derivePackageLabel(items: WarrantyItem[]): string {
 - [ ] **Step 8: Run the tests to verify they pass**
 
 Run: `npm test --prefix admin-web`
-Expected: PASS — 13 tests across 3 suites.
+Expected: PASS — 12 tests across 3 describe blocks in one file.
 
 - [ ] **Step 9: Commit**
 
@@ -740,7 +740,7 @@ export function findUnknownTokens(sections: TemplateSection[]): UnknownToken[] {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npm test --prefix admin-web`
-Expected: PASS — all Task 1 tests plus 27 new ones.
+Expected: PASS — 41 tests total: the 12 from Task 1 plus 29 new ones.
 
 - [ ] **Step 5: Commit**
 
