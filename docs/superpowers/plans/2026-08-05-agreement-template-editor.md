@@ -2271,31 +2271,88 @@ Add the import:
 import { ServiceAgreement } from '../components/print/ServiceAgreement';
 ```
 
-- [ ] **Step 7: Add the warranty column to the items table**
+- [ ] **Step 7: Rebuild the Materials / Package section**
 
-In the items table header (lines 971-978), insert a new `<th>` between Description and Qty:
+The owner asked for this section to be stripped to three things: a search bar, the quick-add buttons, and the item table. The "Quick Add" sub-heading, the separate barcode input with its own Add button, and the "No materials added yet…" helper paragraph all go.
 
-```tsx
-                      <th style={{ width: 130 }}>Warranty</th>
-```
-
-In the row body, insert a matching `<td>` immediately after the description cell (which closes on line 996):
+**7a. One search input replaces the barcode input.** It does both jobs: pressing Enter treats the text as a barcode and adds that item (the existing `handleScan` behaviour, unchanged); typing anything filters the quick-add buttons below. Replace the `Quick Add` label and the barcode `<form>` with:
 
 ```tsx
-                        <td>
-                          <select
-                            value={item.warrantyTier}
-                            style={{ width: '100%', border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', fontSize: '0.85rem' }}
-                            onChange={(e) => updateItem(item._key, { warrantyTier: e.target.value as WarrantyTier })}
-                          >
-                            <option value="MAIN_SET">Main set</option>
-                            <option value="ACCESSORY">Accessory</option>
-                            <option value="NONE">Not covered</option>
-                          </select>
-                        </td>
+              <form onSubmit={handleScan} style={{ marginBottom: '0.75rem' }}>
+                <input
+                  value={scanCode}
+                  placeholder="Search items, or scan a barcode and press Enter"
+                  style={{ width: '100%' }}
+                  onChange={(e) => { setScanCode(e.target.value); setScanError(''); }}
+                />
+              </form>
 ```
 
-The table gains one column. Check every `colSpan` inside this table's `<tfoot>` or totals rows and increase each by one so the columns still line up.
+The `Add` button is dropped — Enter submits the form. `scanError` keeps rendering wherever it does today.
+
+**7b. Filter the quick-add buttons.** Define this next to the other derived values, near `const canSave = …`:
+
+```ts
+  // The search box doubles as a filter: an unmatched barcode still submits on
+  // Enter, so filtering the buttons costs nothing.
+  const itemQuery = scanCode.trim().toLowerCase();
+  const quickAddItems = (inventoryQuery.data ?? []).filter((i) =>
+    itemQuery ? i.name.toLowerCase().includes(itemQuery) : true,
+  );
+```
+
+Map the quick-add buttons over `quickAddItems` instead of the raw inventory list. Use the same array the buttons render from today — if the existing code maps a different variable, filter that one and keep its name.
+
+**7c. Rebuild the table header.** Replace the whole `<thead>` row with:
+
+```tsx
+                    <tr>
+                      <th style={{ width: 44 }}>#</th>
+                      <th>Item</th>
+                      <th>Description</th>
+                      {includeAgreement && <th style={{ width: 130 }}>Warranty</th>}
+                      <th style={{ width: 60 }}>Qty</th>
+                      <th style={{ width: 120 }}>Price</th>
+                      <th style={{ width: 100 }}>Total</th>
+                      <th style={{ width: 36 }}></th>
+                    </tr>
+```
+
+`Unit Price (₱)` becomes `Price` and `Subtotal` becomes `Total`, per the owner's column list.
+
+**7d. Add the line-number cell.** Change the row map to expose the index — `{items.map((item, index) => (` — and make the first cell in the row:
+
+```tsx
+                        <td style={{ color: 'var(--text-muted)', textAlign: 'center' }}>{index + 1}</td>
+```
+
+It is display-only: a line number, not stored data, and it renumbers itself when a row is removed.
+
+**7e. Add the warranty cell, only when the agreement is on.** Insert immediately after the description cell:
+
+```tsx
+                        {includeAgreement && (
+                          <td>
+                            <select
+                              value={item.warrantyTier}
+                              style={{ width: '100%', border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', fontSize: '0.85rem' }}
+                              onChange={(e) => updateItem(item._key, { warrantyTier: e.target.value as WarrantyTier })}
+                            >
+                              <option value="MAIN_SET">Main set</option>
+                              <option value="ACCESSORY">Accessory</option>
+                              <option value="NONE">Not covered</option>
+                            </select>
+                          </td>
+                        )}
+```
+
+The tier is still saved for every item regardless — hiding the control only hides the control. An item added while the toggle is off keeps its `ACCESSORY` default, which is the intended fallback.
+
+**7f. Fix the column count.** The table goes from 6 columns to 7, or 8 with the agreement on. Any `colSpan` in this table's totals or footer rows must track that: use `{includeAgreement ? 8 : 7}` rather than a literal, wherever one spans the full width.
+
+**7g. Drop the empty-state paragraph.** Remove the "No materials added yet. Use the Quick Add buttons above or add a custom item below." line. The `+ Add custom item` button stays.
+
+Leave the print template's own item table (`admin-web/src/components/print/PrintTemplate.tsx`) untouched — this step is the on-screen editor only.
 
 - [ ] **Step 8: Add the toggle and the pin badge**
 
@@ -2367,6 +2424,15 @@ Start the app and open a job order with at least one Main set item and one Acces
 4. After that print, the `Agreement locked to v1` badge appears. Print again — the same text.
 5. Toggle on, Download PDF — same page breaks, and the company logo still renders on page one.
 6. Open a job order whose client has no address — the agreement shows `__________` there and does not crash.
+
+Then check the rebuilt Materials section:
+
+7. With the agreement toggle **off**, the table header reads exactly `#  Item  Description  Qty  Price  Total` and nothing else. Tick the toggle — `Warranty` appears between Description and Qty. Untick — it disappears, and the rows keep their tiers (save, reload, tick again to confirm the values survived).
+8. The `#` column reads 1, 2, 3 down the rows. Remove the second row — the remaining rows renumber to 1, 2 with no gap.
+9. Type `thermal` in the search box — only the Thermal Printer quick-add buttons remain. Clear it — all buttons come back.
+10. Scan or type a known barcode and press Enter — the item is added and the box clears, exactly as before. Type a barcode that does not exist and press Enter — the existing "No inventory item with barcode …" error still shows.
+11. The section shows only the search box, the buttons, the table, and `+ Add custom item`. The `Quick Add` label, the old separate `Add` button, and the "No materials added yet…" paragraph are all gone.
+12. Any totals row that spans the table still lines up with the columns, both with the toggle on and off.
 
 - [ ] **Step 11: Commit**
 
