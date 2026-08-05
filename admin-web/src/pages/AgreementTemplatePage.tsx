@@ -31,9 +31,15 @@ export function AgreementTemplatePage() {
   });
 
   useEffect(() => {
-    if (!templateQuery.data || sections) return;
-    setSections(templateQuery.data.sections.map((s) => ({ heading: s.heading, body: s.body })));
-  }, [templateQuery.data, sections]);
+    if (sections || templateQuery.isLoading) return;
+    if (templateQuery.data) {
+      setSections(templateQuery.data.sections.map((s) => ({ heading: s.heading, body: s.body })));
+    } else if (templateQuery.data === null) {
+      // No version exists yet (empty agreement_versions table) — seed a single
+      // empty section so the owner can author the first version.
+      setSections([{ heading: '', body: '' }]);
+    }
+  }, [templateQuery.data, templateQuery.isLoading, sections]);
 
   const save = useMutation({
     mutationFn: async () =>
@@ -134,7 +140,13 @@ export function AgreementTemplatePage() {
             />
             <button type="button" className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.5rem' }} onClick={() => move(i, -1)} disabled={i === 0} title="Move up">↑</button>
             <button type="button" className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.5rem' }} onClick={() => move(i, 1)} disabled={i === sections.length - 1} title="Move down">↓</button>
-            <button type="button" onClick={() => remove(i)} title="Remove section" style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '1.1rem' }}>×</button>
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              disabled={sections.length === 1}
+              title={sections.length === 1 ? 'The agreement needs at least one section' : 'Remove section'}
+              style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '1.1rem' }}
+            >×</button>
           </div>
           <textarea
             value={section.body}
