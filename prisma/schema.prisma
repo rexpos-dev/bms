@@ -178,6 +178,8 @@ model User {
   devReportsTagged   DevProjectReport[]         @relation("DevReportTaggedAdmin")
   devReportFeedback  DevProjectReportFeedback[] @relation("DevReportFeedbackAuthor")
 
+  agreementVersions  AgreementVersion[]
+
   @@map("users")
 }
 
@@ -394,6 +396,12 @@ model DeviceToken {
 // Job Orders
 // ---------------------------------------------------------------------------
 
+enum WarrantyTier {
+  MAIN_SET
+  ACCESSORY
+  NONE
+}
+
 model JobOrder {
   id           String         @id @default(uuid())
   jobId        String?        @unique @map("job_id")
@@ -410,14 +418,19 @@ model JobOrder {
   laborPct     Decimal?       @map("labor_pct") @db.Decimal(5, 2)
   docType      DocType        @default(JOB_ORDER) @map("doc_type")
 
+  includeAgreement   Boolean @default(false) @map("include_agreement")
+  /** Pinned on first print; null means the order still follows the latest version. */
+  agreementVersionId String? @map("agreement_version_id")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  job      Job?             @relation(fields: [jobId], references: [id])
-  client   Client           @relation(fields: [clientId], references: [id])
-  product  SoftwareProduct? @relation(fields: [productId], references: [id])
-  items    JobOrderItem[]
-  payments Payment[]
+  job              Job?              @relation(fields: [jobId], references: [id])
+  client           Client            @relation(fields: [clientId], references: [id])
+  product          SoftwareProduct?  @relation(fields: [productId], references: [id])
+  items            JobOrderItem[]
+  payments         Payment[]
+  agreementVersion AgreementVersion? @relation(fields: [agreementVersionId], references: [id])
 
   @@map("job_orders")
 }
@@ -431,6 +444,7 @@ model JobOrderItem {
   unitPrice   Decimal @map("unit_price") @db.Decimal(12, 2)
 
   inventoryItemId String? @map("inventory_item_id")
+  warrantyTier WarrantyTier @default(ACCESSORY) @map("warranty_tier")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -438,6 +452,37 @@ model JobOrderItem {
   inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
 
   @@map("job_order_items")
+}
+
+/**
+ * One immutable revision of the Service Level Agreement template. Never updated,
+ * never deleted — a printed job order pins the version it was signed under.
+ */
+model AgreementVersion {
+  id          String   @id @default(uuid())
+  versionNo   Int      @unique @map("version_no")
+  note        String?  @db.Text
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  sections  AgreementSection[]
+  jobOrders JobOrder[]
+  createdBy User?              @relation(fields: [createdById], references: [id])
+
+  @@map("agreement_versions")
+}
+
+model AgreementSection {
+  id        String @id @default(uuid())
+  versionId String @map("version_id")
+  heading   String @db.Text
+  body      String @db.Text
+  sortOrder Int    @map("sort_order")
+
+  version AgreementVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([versionId])
+  @@map("agreement_sections")
 }
 
 model Payment {
