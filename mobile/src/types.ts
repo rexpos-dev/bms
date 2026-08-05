@@ -101,6 +101,8 @@ export interface License {
   status: string;
   activationDate?: string | null;
   expirationDate?: string | null;
+  isTrial?: boolean;
+  trialDays?: number | null;
   client?: { businessName: string };
   product?: { productName: string };
 }

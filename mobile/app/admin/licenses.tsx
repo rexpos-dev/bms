@@ -1,10 +1,30 @@
 import { Text, View } from 'react-native';
 import { AdminList, cardStyles as s } from '@/AdminList';
+import { licenseDates, type Tone } from '@/license-dates';
 import type { License } from '@/types';
 
 const STATUS_COLOR: Record<string, string> = {
   ACTIVATED: '#16a34a', PENDING: '#d97706', EXPIRED: '#dc2626', SUSPENDED: '#6b7280',
 };
+
+const TONE_COLOR: Record<Tone, string> = {
+  normal: '#111827', muted: '#6b7280', danger: '#dc2626',
+};
+
+function LicenseDateLines({ license }: { license: License }) {
+  const d = licenseDates(license);
+  return (
+    <>
+      <Text style={[s.meta, { color: TONE_COLOR[d.installedTone] }]}>Installed: {d.installed}</Text>
+      <Text style={[s.meta, { color: TONE_COLOR[d.expiresTone] }]}>
+        Expires: {d.expires}
+        {d.expiresNote ? (
+          <Text style={{ color: TONE_COLOR[d.expiresNoteTone] }}> · {d.expiresNote}</Text>
+        ) : null}
+      </Text>
+    </>
+  );
+}
 
 export default function LicensesScreen() {
   return (
@@ -22,9 +42,7 @@ export default function LicensesScreen() {
           </View>
           <Text style={s.meta}>{l.product?.productName ?? '—'}</Text>
           <Text style={[s.meta, { fontFamily: 'monospace' }]} numberOfLines={1}>{l.licenseKey}</Text>
-          {l.expirationDate ? (
-            <Text style={s.meta}>Expires: {new Date(l.expirationDate).toLocaleDateString()}</Text>
-          ) : null}
+          <LicenseDateLines license={l} />
         </View>
       )}
     />
