@@ -633,9 +633,16 @@ export function JobOrderPage() {
     element.style.display = 'block';
     try {
       await inlineImages(element);
-      // Assigned to a variable rather than inlined so `pagebreak` (supported by
-      // html2pdf.js at runtime, but missing from its shipped .d.ts) type-checks
-      // structurally instead of tripping the object-literal excess-property check.
+      // `pagebreak` is supported by html2pdf.js at runtime but missing from the
+      // .d.ts it ships, and that file declares an ambient module rather than
+      // exporting the interface, so neither a module augmentation nor a second
+      // ambient block merges into it (both were tried). Binding the options to
+      // a const sidesteps the object-literal excess-property check.
+      //
+      // The cost: TypeScript no longer checks these key NAMES, so a typo such
+      // as `margni` would silently fall back to the library default. Every
+      // value below is annotated to keep at least the types honest — if you
+      // edit this object, re-read it against html2pdf.js's documented options.
       const pdfOptions = {
         margin: [10, 10] as [number, number],
         filename,
