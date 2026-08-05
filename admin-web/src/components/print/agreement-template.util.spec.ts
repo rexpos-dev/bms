@@ -64,6 +64,10 @@ describe('scalar placeholders', () => {
     expect(flat(one('{{date}}', { date: '2026-07-27T15:00:00.000Z' }))).toBe('27th of July 2026');
   });
 
+  it('renders the blank rule for an unparseable date instead of throwing', () => {
+    expect(flat(one('{{date}}', { date: 'not-a-date' }))).toBe(BLANK);
+  });
+
   it('derives the package label from the items', () => {
     expect(flat(one('for {{package_label}}.'))).toBe('for ONE (1) POS Complete Set with accessories.');
   });

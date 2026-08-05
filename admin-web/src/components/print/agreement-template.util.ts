@@ -73,6 +73,10 @@ const AGREEMENT_TIME_ZONE = 'Asia/Manila';
 
 function ordinalDate(iso?: string | null): string {
   const d = iso ? new Date(iso) : new Date();
+  // An unparseable date is a missing value: returning empty lets toLine's
+  // existing rule render the blank rule, rather than throwing out of
+  // Intl.formatToParts and taking the whole agreement render with it.
+  if (Number.isNaN(d.getTime())) return '';
   // The agreement is dated where it is signed. Reading the browser's local
   // calendar day would misdate it by one whenever the viewer sits outside
   // UTC+8, so the Philippine date is pinned explicitly.
