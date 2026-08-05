@@ -1,7 +1,10 @@
 # Service Agreement Attachment on Job Order Print — Design
 
 **Date:** 2026-08-04
-**Status:** Approved (design), pending implementation plan
+**Status:** Superseded on 2026-08-05 by
+[2026-08-05-agreement-template-editor-design.md](2026-08-05-agreement-template-editor-design.md),
+which makes the whole agreement editable in Settings instead of hardcoding the clause
+bodies. The appendix below is still the source of truth for the seeded version 1 text.
 
 ## Problem
 

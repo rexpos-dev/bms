@@ -1,5 +1,10 @@
 # Service Agreement Attachment Implementation Plan
 
+> **SUPERSEDED 2026-08-05.** Do not execute this plan. The design changed to a fully
+> editable, versioned template — see
+> [the new spec](../specs/2026-08-05-agreement-template-editor-design.md). No task below
+> was started.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let an admin optionally emit the Service Level Agreement as extra pages when printing or downloading a Job Order, with every client, company, and warranty detail filled in from existing system data.
