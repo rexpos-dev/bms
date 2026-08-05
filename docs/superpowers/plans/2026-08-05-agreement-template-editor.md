@@ -1017,33 +1017,43 @@ Expected: migration `20260805010000_agreement_seed` applied.
 
 - [ ] **Step 3: Verify the seed landed intact**
 
-`prisma db execute` reads a file rather than stdin here, because the `--stdin` heredoc form does not work in PowerShell. Create `tmp-verify-seed.sql` in the repo root:
+`npx prisma db execute` runs a statement but **never prints `SELECT` output** — it reports success and discards the rows. Verification queries therefore go through `$queryRaw`. Create `tmp-verify-seed.js` in the repo root:
 
-```sql
-SELECT s.sort_order, LEFT(s.heading, 45) AS heading, CHAR_LENGTH(s.body) AS body_len
-FROM agreement_sections s
-JOIN agreement_versions v ON v.id = s.version_id
-WHERE v.version_no = 1
-ORDER BY s.sort_order;
+```js
+const { PrismaClient } = require('@prisma/client');
+
+const prisma = new PrismaClient();
+
+async function main() {
+  const sections = await prisma.$queryRaw`
+    SELECT s.sort_order, LEFT(s.heading, 45) AS heading, CHAR_LENGTH(s.body) AS body_len
+    FROM agreement_sections s
+    JOIN agreement_versions v ON v.id = s.version_id
+    WHERE v.version_no = 1
+    ORDER BY s.sort_order`;
+  console.table(sections);
+
+  const [{ with_client_name }] = await prisma.$queryRaw`
+    SELECT COUNT(*) AS with_client_name
+    FROM agreement_sections
+    WHERE body LIKE '%{{client_name}}%'`;
+  console.log('sections containing {{client_name}}:', Number(with_client_name));
+}
+
+main().finally(() => prisma.$disconnect());
 ```
 
-Run: `npx prisma db execute --file tmp-verify-seed.sql --schema prisma/schema.prisma`
+Run: `node tmp-verify-seed.js`
 
 Expected: ten rows, `sort_order` 0 through 9, headings `''`, `I. SCOPE OF SERVICE:`, … `VIII. OFFICIAL CONTACT PERSONS FOR THE SERVICE PROVIDER`, `''`. Every `body_len` is greater than zero.
 
 - [ ] **Step 4: Verify the placeholders survived**
 
-Replace the contents of `tmp-verify-seed.sql` with:
+The same script prints the placeholder count on its last line.
 
-```sql
-SELECT COUNT(*) AS with_client_name FROM agreement_sections WHERE body LIKE '%{{client_name}}%';
-```
+Expected: `sections containing {{client_name}}: 2` — section 0 (the parties block) and section 9 (the signature block). A count of 0 means the braces did not survive the encoding round-trip; stop and report rather than patching the data by hand.
 
-Run: `npx prisma db execute --file tmp-verify-seed.sql --schema prisma/schema.prisma`
-
-Expected: `with_client_name` = **2** — section 0 (the parties block) and section 9 (the signature block). A count of 0 means the braces did not survive the encoding round-trip; stop and report rather than patching the data by hand.
-
-Then delete the scratch file: `rm tmp-verify-seed.sql`
+Then delete the scratch file: `rm tmp-verify-seed.js`
 
 - [ ] **Step 5: Commit**
 
