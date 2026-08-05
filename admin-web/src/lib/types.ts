@@ -165,6 +165,7 @@ export interface JobOrderItem {
   quantity: number;
   unitPrice: string;
   inventoryItemId: string | null;
+  warrantyTier: WarrantyTier;
   createdAt: string;
 }
 
@@ -187,6 +188,9 @@ export interface JobOrder {
   cameraRate: string | null;
   laborPct: string | null;
   docType: DocumentType;
+  includeAgreement: boolean;
+  agreementVersionId: string | null;
+  agreementVersion?: AgreementVersion | null;
   createdAt: string;
   updatedAt: string;
   job?: Job;
@@ -227,6 +231,32 @@ export interface AuditLog {
   device: string | null;
   createdAt: string;
   user?: AuthenticatedUser | null;
+}
+
+export interface AgreementSection {
+  id: string;
+  heading: string;
+  body: string;
+  sortOrder: number;
+}
+
+export interface AgreementVersion {
+  id: string;
+  versionNo: number;
+  note: string | null;
+  createdById: string | null;
+  createdAt: string;
+  sections: AgreementSection[];
+}
+
+/** The version-history row shape — no sections, but the usage count. */
+export interface AgreementVersionSummary {
+  id: string;
+  versionNo: number;
+  note: string | null;
+  createdAt: string;
+  createdBy: { fullName: string } | null;
+  _count: { jobOrders: number };
 }
 
 export interface CompanyProfile {
