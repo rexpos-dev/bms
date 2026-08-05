@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { AgreementSectionDto, SaveAgreementTemplateDto } from './save-agreement-template.dto';
 
@@ -36,6 +37,23 @@ export class AgreementTemplateService {
   }
 
   async save(dto: SaveAgreementTemplateDto, userId: string) {
+    try {
+      return await this.attemptSave(dto, userId);
+    } catch (e) {
+      // Two admins reading the max versionNo at the same moment can both try
+      // to create the same next version; the unique constraint stops the
+      // duplicate row but leaves the loser holding a raw P2002. Recomputing
+      // the max and trying again is the correct response to that — a second
+      // collision means something worse than ordinary contention, so we let
+      // that one propagate instead of looping.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        return this.attemptSave(dto, userId);
+      }
+      throw e;
+    }
+  }
+
+  private async attemptSave(dto: SaveAgreementTemplateDto, userId: string) {
     const latest = await this.getLatest();
     // Opening the tab and pressing Save should not mint an identical version.
     if (latest && sameContent(latest.sections, dto.sections)) return latest;

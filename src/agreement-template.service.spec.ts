@@ -1,5 +1,10 @@
 import { NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AgreementTemplateService } from './agreement-template.service';
+
+function p2002(message = 'Unique constraint failed on the fields: (`versionNo`)') {
+  return new Prisma.PrismaClientKnownRequestError(message, { code: 'P2002', clientVersion: '5.0.0' });
+}
 
 const v1 = {
   id: 'v1',
@@ -142,5 +147,61 @@ describe('AgreementTemplateService.save', () => {
     expect(tx.agreementVersion.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ note: 'warranty bump' }) }),
     );
+  });
+
+  it('retries once when two saves race for the same versionNo', async () => {
+    const { prisma, tx } = buildPrisma(v1);
+    const secondAttemptResult = { id: 'v-second', versionNo: 2 };
+    tx.agreementVersion.create
+      .mockRejectedValueOnce(p2002())
+      .mockResolvedValueOnce(secondAttemptResult);
+    const service = new AgreementTemplateService(prisma as never);
+
+    const result = await service.save({ sections: [{ heading: 'I', body: 'changed' }] }, 'user-1');
+
+    expect(tx.agreementVersion.create).toHaveBeenCalledTimes(2);
+    expect(result).toBe(secondAttemptResult);
+  });
+
+  it('recomputes the version number on retry instead of reusing the stale max', async () => {
+    const { prisma, tx } = buildPrisma(v1);
+    tx.agreementVersion.findFirst
+      .mockResolvedValueOnce({ versionNo: 1 })
+      .mockResolvedValueOnce({ versionNo: 5 });
+    tx.agreementVersion.create
+      .mockRejectedValueOnce(p2002())
+      .mockImplementationOnce(({ data }) => Promise.resolve({ id: 'v-new', ...data }));
+    const service = new AgreementTemplateService(prisma as never);
+
+    await service.save({ sections: [{ heading: 'I', body: 'changed' }] }, 'user-1');
+
+    expect(tx.agreementVersion.create.mock.calls[0][0].data.versionNo).toBe(2);
+    expect(tx.agreementVersion.create.mock.calls[1][0].data.versionNo).toBe(6);
+  });
+
+  it('propagates a P2002 that collides on both attempts rather than looping', async () => {
+    const { prisma, tx } = buildPrisma(v1);
+    tx.agreementVersion.create.mockRejectedValue(p2002());
+    const service = new AgreementTemplateService(prisma as never);
+
+    await expect(
+      service.save({ sections: [{ heading: 'I', body: 'changed' }] }, 'user-1'),
+    ).rejects.toThrow(Prisma.PrismaClientKnownRequestError);
+    expect(tx.agreementVersion.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry a non-P2002 error', async () => {
+    const { prisma, tx } = buildPrisma(v1);
+    const dbDown = new Prisma.PrismaClientKnownRequestError('Server has closed the connection', {
+      code: 'P1017',
+      clientVersion: '5.0.0',
+    });
+    tx.agreementVersion.create.mockRejectedValue(dbDown);
+    const service = new AgreementTemplateService(prisma as never);
+
+    await expect(
+      service.save({ sections: [{ heading: 'I', body: 'changed' }] }, 'user-1'),
+    ).rejects.toThrow(dbDown);
+    expect(tx.agreementVersion.create).toHaveBeenCalledTimes(1);
   });
 });
