@@ -58,6 +58,12 @@ describe('scalar placeholders', () => {
     expect(flat(one('{{date}}', { date: '2026-07-11T02:00:00.000Z' }))).toBe('11th of July 2026');
   });
 
+  it('dates the agreement in Manila, not in the viewer timezone', () => {
+    // Both instants are 27 July in Manila but 26 and 27 July in UTC.
+    expect(flat(one('{{date}}', { date: '2026-07-26T19:00:00.000Z' }))).toBe('27th of July 2026');
+    expect(flat(one('{{date}}', { date: '2026-07-27T15:00:00.000Z' }))).toBe('27th of July 2026');
+  });
+
   it('derives the package label from the items', () => {
     expect(flat(one('for {{package_label}}.'))).toBe('for ONE (1) POS Complete Set with accessories.');
   });

@@ -69,9 +69,22 @@ const LIST_LINE_RE = /^\{\{\s*(main_set_items|accessory_items)\s*\}\}$/;
 
 const COLUMN_SEP = ' | ';
 
+const AGREEMENT_TIME_ZONE = 'Asia/Manila';
+
 function ordinalDate(iso?: string | null): string {
   const d = iso ? new Date(iso) : new Date();
-  const day = d.getDate();
+  // The agreement is dated where it is signed. Reading the browser's local
+  // calendar day would misdate it by one whenever the viewer sits outside
+  // UTC+8, so the Philippine date is pinned explicitly.
+  const parts = new Intl.DateTimeFormat('en-PH', {
+    timeZone: AGREEMENT_TIME_ZONE,
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).formatToParts(d);
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+
+  const day = Number(part('day'));
   const tens = day % 100;
   const suffix =
     tens >= 11 && tens <= 13
@@ -83,8 +96,8 @@ function ordinalDate(iso?: string | null): string {
           : day % 10 === 3
             ? 'rd'
             : 'th';
-  const month = d.toLocaleDateString('en-PH', { month: 'long' });
-  return `${day}${suffix} of ${month} ${d.getFullYear()}`;
+
+  return `${day}${suffix} of ${part('month')} ${part('year')}`;
 }
 
 function tokenValue(token: string, values: AgreementValues): string | null | undefined {
