@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
 import { TableToolbar, matchesSearch } from '../components/TableToolbar';
+import { ManageCategoriesDialog } from '../components/ManageCategoriesDialog';
 import type { LicenseType, SoftwareProduct, InventoryItem, ItemCategory } from '../lib/types';
 import { InventoryPage } from './InventoryPage';
 
@@ -20,6 +21,7 @@ const EMPTY_FORM = {
 
 export function InventoryManagementPage() {
   const [tab, setTab] = useState<string>('software');
+  const [showCategories, setShowCategories] = useState(false);
 
   const categoriesQuery = useQuery({
     queryKey: ['item-categories'],
@@ -61,7 +63,17 @@ export function InventoryManagementPage() {
             Uncategorised
           </TabButton>
         )}
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{ fontSize: '0.85rem', marginLeft: 'auto' }}
+          onClick={() => setShowCategories(true)}
+        >
+          ⚙ Manage categories
+        </button>
       </div>
+
+      <ManageCategoriesDialog isOpen={showCategories} onClose={() => setShowCategories(false)} />
 
       {tab === 'software' && <SoftwareTab />}
       {tab === 'uncategorised' && <InventoryPage scope={{ uncategorised: true }} />}
