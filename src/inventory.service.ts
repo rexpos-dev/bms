@@ -8,10 +8,11 @@ import { UpdateInventoryItemDto } from './update-inventory-item.dto';
 export class InventoryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(includeInactive = false): Promise<InventoryItem[]> {
+  list(includeInactive = false) {
     return this.prisma.inventoryItem.findMany({
       where: includeInactive ? undefined : { active: true },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      include: { category: true },
     });
   }
 
@@ -35,6 +36,7 @@ export class InventoryService {
           lowStockAlert: dto.lowStockAlert ?? 0,
           sortOrder: dto.sortOrder ?? 0,
           active: dto.active ?? true,
+          categoryId: dto.categoryId ?? null,
         },
       });
     } catch (e) {
@@ -44,7 +46,7 @@ export class InventoryService {
 
   async update(id: string, dto: UpdateInventoryItemDto): Promise<InventoryItem> {
     await this.getOrThrow(id);
-    const data: Prisma.InventoryItemUpdateInput = {};
+    const data: Prisma.InventoryItemUncheckedUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.description !== undefined) data.description = dto.description?.trim() || null;
     if (dto.barcode !== undefined) data.barcode = dto.barcode?.trim() || null;
@@ -53,6 +55,7 @@ export class InventoryService {
     if (dto.lowStockAlert !== undefined) data.lowStockAlert = dto.lowStockAlert;
     if (dto.sortOrder !== undefined) data.sortOrder = dto.sortOrder;
     if (dto.active !== undefined) data.active = dto.active;
+    if (dto.categoryId !== undefined) data.categoryId = dto.categoryId;
     try {
       return await this.prisma.inventoryItem.update({ where: { id }, data });
     } catch (e) {

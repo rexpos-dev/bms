@@ -155,6 +155,8 @@ export interface Withdrawal {
 export type DiscountType = 'FIXED' | 'PERCENTAGE';
 export type JobOrderStatus = 'DRAFT' | 'FINALIZED' | 'ON_GOING' | 'COMPLETED' | 'CANCELLED';
 
+export type WarrantyTier = 'MAIN_SET' | 'ACCESSORY' | 'NONE';
+
 export interface JobOrderItem {
   id: string;
   jobOrderId: string;
@@ -163,6 +165,7 @@ export interface JobOrderItem {
   quantity: number;
   unitPrice: string;
   inventoryItemId: string | null;
+  warrantyTier: WarrantyTier;
   createdAt: string;
 }
 
@@ -185,6 +188,9 @@ export interface JobOrder {
   cameraRate: string | null;
   laborPct: string | null;
   docType: DocumentType;
+  includeAgreement: boolean;
+  agreementVersionId: string | null;
+  agreementVersion?: AgreementVersion | null;
   createdAt: string;
   updatedAt: string;
   job?: Job;
@@ -225,6 +231,32 @@ export interface AuditLog {
   device: string | null;
   createdAt: string;
   user?: AuthenticatedUser | null;
+}
+
+export interface AgreementSection {
+  id: string;
+  heading: string;
+  body: string;
+  sortOrder: number;
+}
+
+export interface AgreementVersion {
+  id: string;
+  versionNo: number;
+  note: string | null;
+  createdById: string | null;
+  createdAt: string;
+  sections: AgreementSection[];
+}
+
+/** The version-history row shape — no sections, but the usage count. */
+export interface AgreementVersionSummary {
+  id: string;
+  versionNo: number;
+  note: string | null;
+  createdAt: string;
+  createdBy: { fullName: string } | null;
+  _count: { jobOrders: number };
 }
 
 export interface CompanyProfile {
@@ -399,6 +431,16 @@ export interface ResetModuleInfo {
   count: number;
 }
 
+export interface ItemCategory {
+  id: string;
+  name: string;
+  /** Null means this category's items appear in every job order type. */
+  jobOrderType: JobOrderType | null;
+  sortOrder: number;
+  active: boolean;
+  _count?: { items: number };
+}
+
 export interface InventoryItem {
   id: string;
   name: string;
@@ -409,6 +451,8 @@ export interface InventoryItem {
   lowStockAlert: number;
   sortOrder: number;
   active: boolean;
+  categoryId: string | null;
+  category?: ItemCategory | null;
   createdAt: string;
   updatedAt: string;
 }

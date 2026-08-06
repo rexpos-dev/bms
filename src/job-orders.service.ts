@@ -13,6 +13,14 @@ const INCLUDE_FULL = {
   items: { orderBy: { createdAt: 'asc' as const } },
 };
 
+// Split from INCLUDE_FULL because findAll() shares that shape for the job
+// order list: embedding the full agreement text there would put several
+// kilobytes of legal prose on every row of a response that never displays it.
+const INCLUDE_WITH_AGREEMENT = {
+  ...INCLUDE_FULL,
+  agreementVersion: { include: { sections: { orderBy: { sortOrder: 'asc' as const } } } },
+};
+
 @Injectable()
 export class JobOrdersService {
   constructor(
@@ -43,6 +51,7 @@ export class JobOrdersService {
       cameraRate: dto.cameraRate ?? null,
       laborPct: dto.laborPct ?? null,
       docType: dto.docType ?? DocType.JOB_ORDER,
+      includeAgreement: dto.includeAgreement ?? false,
     };
     const newCompleted = data.status === JobOrderStatus.COMPLETED;
 
@@ -52,6 +61,7 @@ export class JobOrdersService {
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       inventoryItemId: item.inventoryItemId ?? null,
+      warrantyTier: item.warrantyTier ?? 'ACCESSORY',
     }));
 
     return this.prisma.$transaction(async (tx) => {
@@ -104,7 +114,7 @@ export class JobOrdersService {
   async findByJob(jobId: string) {
     const jobOrder = await this.prisma.jobOrder.findUnique({
       where: { jobId },
-      include: INCLUDE_FULL,
+      include: INCLUDE_WITH_AGREEMENT,
     });
     return jobOrder;
   }
@@ -112,7 +122,7 @@ export class JobOrdersService {
   async findOne(id: string) {
     const jobOrder = await this.prisma.jobOrder.findUnique({
       where: { id },
-      include: INCLUDE_FULL,
+      include: INCLUDE_WITH_AGREEMENT,
     });
     if (!jobOrder) throw new NotFoundException(`Job order ${id} not found`);
     return jobOrder;
@@ -148,5 +158,39 @@ export class JobOrdersService {
         include: INCLUDE_FULL,
       });
     });
+  }
+
+  /**
+   * Locks the order to the current template so a reprint reproduces the signed
+   * text. Idempotent — the print handler calls it on every print.
+   */
+  async pinAgreement(id: string) {
+    const jobOrder = await this.prisma.jobOrder.findUnique({
+      where: { id },
+      select: { id: true, agreementVersionId: true },
+    });
+    if (!jobOrder) throw new NotFoundException(`Job order ${id} not found`);
+    if (jobOrder.agreementVersionId) return { agreementVersionId: jobOrder.agreementVersionId };
+
+    const latest = await this.prisma.agreementVersion.findFirst({
+      orderBy: { versionNo: 'desc' },
+      select: { id: true },
+    });
+    if (!latest) return { agreementVersionId: null };
+
+    await this.prisma.jobOrder.update({
+      where: { id },
+      data: { agreementVersionId: latest.id },
+    });
+    return { agreementVersionId: latest.id };
+  }
+
+  /** Releases the lock so the order follows the latest template again. */
+  async unpinAgreement(id: string) {
+    const jobOrder = await this.prisma.jobOrder.findUnique({ where: { id }, select: { id: true } });
+    if (!jobOrder) throw new NotFoundException(`Job order ${id} not found`);
+
+    await this.prisma.jobOrder.update({ where: { id }, data: { agreementVersionId: null } });
+    return { agreementVersionId: null };
   }
 }

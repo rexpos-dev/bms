@@ -1,10 +1,12 @@
 import { type FormEvent, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
 import { TableToolbar, matchesSearch } from '../components/TableToolbar';
-import type { LicenseType, SoftwareProduct } from '../lib/types';
+import type { LicenseType, SoftwareProduct, InventoryItem, ItemCategory } from '../lib/types';
+import { InventoryPage } from './InventoryPage';
 
 const LICENSE_TYPES: LicenseType[] = ['SUBSCRIPTION_MONTHLY', 'SUBSCRIPTION_ANNUAL', 'LIFETIME'];
 
@@ -17,6 +19,71 @@ const EMPTY_FORM = {
 };
 
 export function ProductsPage() {
+  const [tab, setTab] = useState<string>('software');
+
+  const categoriesQuery = useQuery({
+    queryKey: ['item-categories'],
+    queryFn: async () => (await api.get<ItemCategory[]>('/item-categories')).data,
+  });
+
+  const itemsQuery = useQuery({
+    queryKey: ['inventory', 'all'],
+    queryFn: async () => (await api.get<InventoryItem[]>('/inventory', { params: { all: true } })).data,
+  });
+
+  const categories = categoriesQuery.data ?? [];
+  // Only offer the uncategorised tab when something is actually stranded there,
+  // so a clean catalog does not carry a permanently empty tab.
+  const hasUncategorised = (itemsQuery.data ?? []).some((i) => i.categoryId === null);
+
+  const active = categories.find((c) => c.id === tab);
+
+  return (
+    <div>
+      <div style={{ marginBottom: '1.5rem' }}>
+        <h1 style={{ marginBottom: '0.25rem' }}>Products</h1>
+        <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
+          Licensable software systems and the hardware catalog, grouped by category.
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+        <TabButton active={tab === 'software'} onClick={() => setTab('software')}>
+          Software
+        </TabButton>
+        {categories.map((c) => (
+          <TabButton key={c.id} active={tab === c.id} onClick={() => setTab(c.id)}>
+            {c.name}
+          </TabButton>
+        ))}
+        {hasUncategorised && (
+          <TabButton active={tab === 'uncategorised'} onClick={() => setTab('uncategorised')}>
+            Uncategorised
+          </TabButton>
+        )}
+      </div>
+
+      {tab === 'software' && <SoftwareTab />}
+      {tab === 'uncategorised' && <InventoryPage scope={{ uncategorised: true }} />}
+      {active && <InventoryPage key={active.id} scope={{ categoryId: active.id }} />}
+    </div>
+  );
+}
+
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`btn ${active ? 'btn-primary' : 'btn-secondary'}`}
+      style={{ fontSize: '0.85rem' }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SoftwareTab() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
@@ -51,13 +118,7 @@ export function ProductsPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ marginBottom: '0.25rem' }}>Software Products</h1>
-          <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
-            POS, accounting, school, HR/payroll, and inventory systems available for licensing.
-          </p>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.5rem' }}>
         <button type="button" className="btn btn-primary" onClick={() => setShowForm(true)}>
           New product
         </button>

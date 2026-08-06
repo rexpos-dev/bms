@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -11,7 +12,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { DiscountType, DocType, JobOrderStatus, JobOrderType } from '@prisma/client';
+import { DiscountType, DocType, JobOrderStatus, JobOrderType, WarrantyTier } from '@prisma/client';
 
 export class JobOrderItemDto {
   @IsString()
@@ -33,6 +34,11 @@ export class JobOrderItemDto {
   @IsOptional()
   @IsString()
   inventoryItemId?: string;
+
+  /** Which Section I warranty list this line appears under on the printed agreement. */
+  @IsOptional()
+  @IsEnum(WarrantyTier)
+  warrantyTier?: WarrantyTier;
 }
 
 export class UpsertJobOrderDto {
@@ -96,6 +102,11 @@ export class UpsertJobOrderDto {
   @IsOptional()
   @IsEnum(DocType)
   docType?: DocType;
+
+  /** Appends the Service Level Agreement pages when the order is printed. */
+  @IsOptional()
+  @IsBoolean()
+  includeAgreement?: boolean;
 
   @IsArray()
   @ValidateNested({ each: true })

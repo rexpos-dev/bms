@@ -15,6 +15,102 @@ function fmtDate(val: string | null | undefined) {
   return val ? new Date(val).toLocaleDateString() : '—';
 }
 
+type Tone = 'normal' | 'muted' | 'danger';
+
+interface LicenseDatesView {
+  installed: string;
+  installedTone: Tone;
+  expires: string;
+  expiresTone: Tone;
+  expiresNote: string | null;
+  expiresNoteTone: Tone;
+}
+
+const DAY_MS = 86_400_000;
+
+const TONE_COLOR: Record<Tone, string | undefined> = {
+  normal: undefined,
+  muted: 'var(--text-muted)',
+  danger: 'var(--danger)',
+};
+
+/**
+ * Display strings for a license's install (= activation) and expiry dates.
+ * A trial's clock only starts at activation, so a PENDING trial has no expiry
+ * date yet — it shows the rule ("30 days after install") instead of a blank.
+ */
+function licenseDates(license: License): LicenseDatesView {
+  const installed = license.activationDate
+    ? new Date(license.activationDate).toLocaleDateString()
+    : 'Not yet installed';
+  const installedTone: Tone = license.activationDate ? 'normal' : 'muted';
+
+  if (license.expirationDate) {
+    const daysLeft = Math.ceil((new Date(license.expirationDate).getTime() - Date.now()) / DAY_MS);
+    return {
+      installed,
+      installedTone,
+      expires: new Date(license.expirationDate).toLocaleDateString(),
+      expiresTone: 'normal',
+      expiresNote: daysLeft <= 0 ? 'Expired' : daysLeft === 1 ? '1 day left' : `${daysLeft} days left`,
+      expiresNoteTone: daysLeft <= 7 ? 'danger' : 'muted',
+    };
+  }
+
+  return {
+    installed,
+    installedTone,
+    expires: license.isTrial ? `${license.trialDays ?? 30} days after install` : 'No expiry',
+    expiresTone: 'muted',
+    expiresNote: null,
+    expiresNoteTone: 'muted',
+  };
+}
+
+/** The Installed + Expires `<td>` pair for one table row. */
+function LicenseDateCells({ license }: { license: License }) {
+  const d = licenseDates(license);
+  return (
+    <>
+      <td style={{ whiteSpace: 'nowrap', color: TONE_COLOR[d.installedTone] }}>{d.installed}</td>
+      <td style={{ whiteSpace: 'nowrap' }}>
+        <div style={{ color: TONE_COLOR[d.expiresTone] }}>{d.expires}</div>
+        {d.expiresNote && (
+          <div style={{ fontSize: '0.75rem', color: TONE_COLOR[d.expiresNoteTone] }}>
+            {d.expiresNote}
+          </div>
+        )}
+      </td>
+    </>
+  );
+}
+
+/** The Installed + Expiry Date rows inside the View Details dialog. */
+function LicenseDateDetails({ license }: { license: License }) {
+  const d = licenseDates(license);
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+      <DetailRow
+        label="Installed"
+        value={<span style={{ color: TONE_COLOR[d.installedTone] }}>{d.installed}</span>}
+      />
+      <DetailRow
+        label="Expiry Date"
+        value={
+          <>
+            <span style={{ color: TONE_COLOR[d.expiresTone] }}>{d.expires}</span>
+            {d.expiresNote && (
+              <div style={{ fontSize: '0.75rem', color: TONE_COLOR[d.expiresNoteTone] }}>
+                {d.expiresNote}
+              </div>
+            )}
+          </>
+        }
+      />
+    </div>
+  );
+}
+
 function TrialBadge() {
   return (
     <span style={{
@@ -646,8 +742,8 @@ export function LicensesPage() {
       {/* Tabs */}
       {isAdminRole && (
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '1.75rem' }}>
-          <TabButton label="Licenses" active={activeTab === 'licenses'} count={allLicenses.length} onClick={() => setActiveTab('licenses')} />
-          <TabButton label="NENPOS Clients" active={activeTab === 'nenpos'} count={nenposQuery.data?.length} onClick={() => setActiveTab('nenpos')} />
+          <TabButton label="Bhagoh Licenses" active={activeTab === 'licenses'} count={allLicenses.length} onClick={() => setActiveTab('licenses')} />
+          <TabButton label="NENPOS Licenses" active={activeTab === 'nenpos'} count={nenposQuery.data?.length} onClick={() => setActiveTab('nenpos')} />
         </div>
       )}
 
@@ -789,12 +885,9 @@ export function LicensesPage() {
                 } />
                 <DetailRow label="Software Product" value={viewLicense.product?.productName ?? '—'} />
                 {viewLicense.isTrial && (
-                  <DetailRow label="Trial Period" value={`${viewLicense.trialDays ?? 30} days from activation`} />
+                  <DetailRow label="Trial Period" value={`${viewLicense.trialDays ?? 30} days from install`} />
                 )}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <DetailRow label="Activation Date" value={fmtDate(viewLicense.activationDate)} />
-                  <DetailRow label="Expiry Date" value={fmtDate(viewLicense.expirationDate)} />
-                </div>
+                <LicenseDateDetails license={viewLicense} />
                 {viewLicense.activatedById && (
                   <DetailRow label="Activated By (ID)" value={<span style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{viewLicense.activatedById}</span>} />
                 )}
@@ -926,7 +1019,7 @@ export function LicensesPage() {
                           <th>Product</th>
                           <th>License Key</th>
                           <th>Status</th>
-                          <th>Activated</th>
+                          <th>Installed</th>
                           <th>Expires</th>
                           <th style={{ textAlign: 'right' }}>Action</th>
                         </tr>
@@ -944,8 +1037,7 @@ export function LicensesPage() {
                                 {license.isTrial && <TrialBadge />}
                               </td>
                               <td><StatusBadge status={license.status} /></td>
-                              <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(license.activationDate)}</td>
-                              <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(license.expirationDate)}</td>
+                              <LicenseDateCells license={license} />
                               <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                                 <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
                                   {isDeveloper && license.status === 'PENDING' && (

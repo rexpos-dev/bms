@@ -19,6 +19,7 @@ function buildTx() {
         Promise.resolve({ id: 'jo-created', job: null, items: [], ...stripNested(data) }),
       ),
     },
+    agreementVersion: { findFirst: jest.fn() },
     job: {
       create: jest.fn().mockResolvedValue({ id: 'job-created' }),
     },
@@ -33,7 +34,12 @@ function stripNested(data: Record<string, unknown>) {
 
 function buildService(tx: ReturnType<typeof buildTx>) {
   const prisma = {
-    jobOrder: { findUnique: jest.fn() },
+    jobOrder: {
+      findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+      update: jest.fn().mockResolvedValue({}),
+    },
+    agreementVersion: { findFirst: jest.fn() },
     $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
   };
   const inventory = { applyJobOrderStock: jest.fn() };
@@ -81,6 +87,57 @@ describe('JobOrdersService.upsert', () => {
     expect(tx.jobOrder.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ jobId: undefined }) }),
     );
+  });
+
+  it('persists includeAgreement when the dto sets it', async () => {
+    const tx = buildTx();
+    const { service } = buildService(tx);
+
+    await service.upsert({ ...baseDto, includeAgreement: true }, user);
+
+    expect(tx.jobOrder.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ includeAgreement: true }) }),
+    );
+  });
+
+  it('defaults includeAgreement to false when the dto omits it', async () => {
+    const tx = buildTx();
+    const { service } = buildService(tx);
+
+    await service.upsert(baseDto, user);
+
+    expect(tx.jobOrder.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ includeAgreement: false }) }),
+    );
+  });
+
+  it('persists the warranty tier on each item', async () => {
+    const tx = buildTx();
+    const { service } = buildService(tx);
+
+    await service.upsert(
+      {
+        ...baseDto,
+        items: [
+          { name: 'System Unit', quantity: 1, unitPrice: 20000, warrantyTier: 'MAIN_SET' },
+          { name: 'Cash Drawer', quantity: 1, unitPrice: 3000, warrantyTier: 'ACCESSORY' },
+        ],
+      },
+      user,
+    );
+
+    const created = tx.jobOrder.create.mock.calls[0][0].data.items.createMany.data;
+    expect(created.map((i: { warrantyTier: string }) => i.warrantyTier)).toEqual(['MAIN_SET', 'ACCESSORY']);
+  });
+
+  it('defaults an item warranty tier to ACCESSORY when omitted', async () => {
+    const tx = buildTx();
+    const { service } = buildService(tx);
+
+    await service.upsert({ ...baseDto, items: [{ name: 'Cash Drawer', quantity: 1, unitPrice: 3000 }] }, user);
+
+    const created = tx.jobOrder.create.mock.calls[0][0].data.items.createMany.data;
+    expect(created[0].warrantyTier).toBe('ACCESSORY');
   });
 });
 
@@ -134,5 +191,117 @@ describe('JobOrdersService.convert', () => {
     tx.jobOrder.findUnique.mockResolvedValue(null);
 
     await expect(service.convert('nope', { scheduleDate: '2026-08-01' })).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('JobOrdersService.pinAgreement', () => {
+  it('pins an unpinned order to the latest version', async () => {
+    const tx = buildTx();
+    const { service, prisma } = buildService(tx);
+    prisma.jobOrder.findUnique.mockResolvedValue({ id: 'jo-1', agreementVersionId: null });
+    prisma.agreementVersion.findFirst.mockResolvedValue({ id: 'v3' });
+
+    const result = await service.pinAgreement('jo-1');
+
+    expect(prisma.jobOrder.update).toHaveBeenCalledWith({
+      where: { id: 'jo-1' },
+      data: { agreementVersionId: 'v3' },
+    });
+    expect(result).toEqual({ agreementVersionId: 'v3' });
+  });
+
+  it('leaves an already-pinned order alone', async () => {
+    const tx = buildTx();
+    const { service, prisma } = buildService(tx);
+    prisma.jobOrder.findUnique.mockResolvedValue({ id: 'jo-1', agreementVersionId: 'v1' });
+    prisma.agreementVersion.findFirst.mockResolvedValue({ id: 'v3' });
+
+    const result = await service.pinAgreement('jo-1');
+
+    expect(prisma.jobOrder.update).not.toHaveBeenCalled();
+    expect(result).toEqual({ agreementVersionId: 'v1' });
+  });
+
+  it('is a no-op when no template version exists', async () => {
+    const tx = buildTx();
+    const { service, prisma } = buildService(tx);
+    prisma.jobOrder.findUnique.mockResolvedValue({ id: 'jo-1', agreementVersionId: null });
+    prisma.agreementVersion.findFirst.mockResolvedValue(null);
+
+    const result = await service.pinAgreement('jo-1');
+
+    expect(prisma.jobOrder.update).not.toHaveBeenCalled();
+    expect(result).toEqual({ agreementVersionId: null });
+  });
+
+  it('404s on a missing order', async () => {
+    const tx = buildTx();
+    const { service, prisma } = buildService(tx);
+    prisma.jobOrder.findUnique.mockResolvedValue(null);
+
+    await expect(service.pinAgreement('nope')).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('JobOrdersService.unpinAgreement', () => {
+  it('clears the pin', async () => {
+    const tx = buildTx();
+    const { service, prisma } = buildService(tx);
+    prisma.jobOrder.findUnique.mockResolvedValue({ id: 'jo-1', agreementVersionId: 'v1' });
+
+    const result = await service.unpinAgreement('jo-1');
+
+    expect(prisma.jobOrder.update).toHaveBeenCalledWith({
+      where: { id: 'jo-1' },
+      data: { agreementVersionId: null },
+    });
+    expect(result).toEqual({ agreementVersionId: null });
+  });
+
+  it('404s on a missing order', async () => {
+    const tx = buildTx();
+    const { service, prisma } = buildService(tx);
+    prisma.jobOrder.findUnique.mockResolvedValue(null);
+
+    await expect(service.unpinAgreement('nope')).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('JobOrdersService include shapes', () => {
+  it('findAll does not request the agreement version, since it backs the list page', async () => {
+    const tx = buildTx();
+    const { service, prisma } = buildService(tx);
+
+    await service.findAll();
+
+    expect(prisma.jobOrder.findMany).toHaveBeenCalledTimes(1);
+    const include = prisma.jobOrder.findMany.mock.calls[0][0].include;
+    expect(include.agreementVersion).toBeUndefined();
+  });
+
+  it('findOne requests the agreement version with sections ordered by sortOrder asc', async () => {
+    const tx = buildTx();
+    const { service, prisma } = buildService(tx);
+    prisma.jobOrder.findUnique.mockResolvedValue({ id: 'jo-1' });
+
+    await service.findOne('jo-1');
+
+    const include = prisma.jobOrder.findUnique.mock.calls[0][0].include;
+    expect(include.agreementVersion).toEqual({
+      include: { sections: { orderBy: { sortOrder: 'asc' } } },
+    });
+  });
+
+  it('findByJob requests the agreement version with sections ordered by sortOrder asc', async () => {
+    const tx = buildTx();
+    const { service, prisma } = buildService(tx);
+    prisma.jobOrder.findUnique.mockResolvedValue({ id: 'jo-1' });
+
+    await service.findByJob('job-1');
+
+    const include = prisma.jobOrder.findUnique.mock.calls[0][0].include;
+    expect(include.agreementVersion).toEqual({
+      include: { sections: { orderBy: { sortOrder: 'asc' } } },
+    });
   });
 });

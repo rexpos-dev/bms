@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import type { InventoryItem, StockMovement, StockMovementReason } from '../lib/types';
+import type { InventoryItem, ItemCategory, StockMovement, StockMovementReason } from '../lib/types';
 import { Dialog } from '../components/Dialog';
 import { TableToolbar, matchesSearch, inDateRange } from '../components/TableToolbar';
 
@@ -19,6 +19,7 @@ interface ItemForm {
   stockQty: string;
   lowStockAlert: string;
   active: boolean;
+  categoryId: string;
 }
 
 const emptyForm: ItemForm = {
@@ -29,6 +30,7 @@ const emptyForm: ItemForm = {
   stockQty: '',
   lowStockAlert: '',
   active: true,
+  categoryId: '',
 };
 
 function isLow(item: InventoryItem): boolean {
@@ -41,7 +43,12 @@ function apiErrorMessage(err: unknown, fallback: string): string {
   return msg ?? fallback;
 }
 
-export function InventoryPage() {
+export interface InventoryPageProps {
+  /** Omit for the full catalog (Settings). Pass a scope to render one Products tab. */
+  scope?: { categoryId: string } | { uncategorised: true };
+}
+
+export function InventoryPage({ scope }: InventoryPageProps = {}) {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<InventoryItem | null>(null);
@@ -65,6 +72,13 @@ export function InventoryPage() {
     enabled: !!historyTarget,
   });
 
+  const categoriesQuery = useQuery({
+    queryKey: ['item-categories'],
+    queryFn: async () => (await api.get<ItemCategory[]>('/item-categories')).data,
+  });
+
+  const scopedCategoryId = scope && 'categoryId' in scope ? scope.categoryId : null;
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['inventory'] });
   };
@@ -78,6 +92,7 @@ export function InventoryPage() {
         unitPrice: form.unitPrice === '' ? 0 : Number(form.unitPrice),
         lowStockAlert: form.lowStockAlert === '' ? 0 : Number(form.lowStockAlert),
         active: form.active,
+        categoryId: form.categoryId || null,
       };
       if (editing) {
         return api.patch(`/inventory/${editing.id}`, payload);
@@ -112,7 +127,7 @@ export function InventoryPage() {
 
   const openAdd = () => {
     setEditing(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, categoryId: scopedCategoryId ?? '' });
     setFormError('');
     setShowForm(true);
   };
@@ -127,6 +142,7 @@ export function InventoryPage() {
       stockQty: String(item.stockQty),
       lowStockAlert: String(item.lowStockAlert),
       active: item.active,
+      categoryId: item.categoryId ?? '',
     });
     setFormError('');
     setShowForm(true);
@@ -155,7 +171,12 @@ export function InventoryPage() {
     setForm((f) => ({ ...f, [key]: value }));
 
   const [itemSearch, setItemSearch] = useState('');
-  const filteredItems = (itemsQuery.data ?? []).filter((item) =>
+  const scopedItems = (itemsQuery.data ?? []).filter((item) => {
+    if (!scope) return true;
+    if ('uncategorised' in scope) return item.categoryId === null;
+    return item.categoryId === scope.categoryId;
+  });
+  const filteredItems = scopedItems.filter((item) =>
     matchesSearch(itemSearch, item.name, item.description, item.barcode),
   );
 
@@ -178,9 +199,9 @@ export function InventoryPage() {
 
       {itemsQuery.isLoading && <p>Loading inventory…</p>}
       {itemsQuery.isError && <p className="error-text">Failed to load inventory.</p>}
-      {itemsQuery.data?.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No inventory items yet. Add your first one.</p>}
+      {scopedItems.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No inventory items yet. Add your first one.</p>}
 
-      {itemsQuery.data && itemsQuery.data.length > 0 && (
+      {scopedItems.length > 0 && (
         <div style={{ overflowX: 'auto' }} className="card" >
           <TableToolbar
             search={itemSearch}
@@ -191,6 +212,7 @@ export function InventoryPage() {
             <thead>
               <tr>
                 <th>Item</th>
+                {!scope && <th>Category</th>}
                 <th>Barcode</th>
                 <th style={{ textAlign: 'right' }}>Unit Price</th>
                 <th style={{ textAlign: 'center' }}>Stock</th>
@@ -200,7 +222,7 @@ export function InventoryPage() {
             </thead>
             <tbody>
               {filteredItems.length === 0 && (
-                <tr><td colSpan={6} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
+                <tr><td colSpan={scope ? 6 : 7} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
               )}
               {filteredItems.map((item) => (
                 <tr key={item.id} style={{ opacity: item.active ? 1 : 0.55 }}>
@@ -210,6 +232,11 @@ export function InventoryPage() {
                       <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{item.description}</div>
                     )}
                   </td>
+                  {!scope && (
+                    <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                      {item.category?.name ?? 'Uncategorised'}
+                    </td>
+                  )}
                   <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{item.barcode || '—'}</td>
                   <td style={{ textAlign: 'right' }}>₱{Number(item.unitPrice).toLocaleString()}</td>
                   <td style={{ textAlign: 'center' }}>
@@ -282,6 +309,22 @@ export function InventoryPage() {
           <div className="field">
             <label>Name *</label>
             <input value={form.name} onChange={(e) => set('name', e.target.value)} autoFocus placeholder="e.g. Thermal Printer 80mm" />
+          </div>
+          <div className="field">
+            <label htmlFor="inv-category">Category</label>
+            <select
+              id="inv-category"
+              value={form.categoryId}
+              onChange={(e) => set('categoryId', e.target.value)}
+            >
+              <option value="">Uncategorised — shows in every job order type</option>
+              {(categoriesQuery.data ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.jobOrderType ? ` (${c.jobOrderType})` : ' (all types)'}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="field">
             <label>Description</label>

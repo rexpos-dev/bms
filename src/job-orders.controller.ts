@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import type { AuthenticatedUser } from './authenticated-user.type';
 import { CurrentUser } from './current-user.decorator';
@@ -44,5 +44,18 @@ export class JobOrdersController {
   @Post(':id/convert')
   convert(@Param('id') id: string, @Body() dto: ConvertJobOrderDto) {
     return this.jobOrdersService.convert(id, dto);
+  }
+
+  /** Locks the order's agreement text — called by the print and download handlers */
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
+  @Post(':id/pin-agreement')
+  pinAgreement(@Param('id') id: string) {
+    return this.jobOrdersService.pinAgreement(id);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @Delete(':id/pin-agreement')
+  unpinAgreement(@Param('id') id: string) {
+    return this.jobOrdersService.unpinAgreement(id);
   }
 }

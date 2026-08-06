@@ -6,6 +6,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { AgreementTemplateModule } from './agreement-template.module';
 import { AppVersionModule } from './app-version.module';
 import { AuditLogsModule } from './audit-logs.module';
 import { EventsModule } from './events.module';
@@ -18,6 +19,7 @@ import { CompanyProfileModule } from './company-profile.module';
 import { DevProjectsModule } from './dev-projects.module';
 import { EarningsModule } from './earnings.module';
 import { InventoryModule } from './inventory.module';
+import { ItemCategoriesModule } from './item-categories.module';
 import { JobOrdersModule } from './job-orders.module';
 import { JobsModule } from './jobs.module';
 import { KpisModule } from './kpis.module';
@@ -67,6 +69,8 @@ import { WithdrawalsModule } from './withdrawals.module';
     JobOrdersModule,
     PaymentsModule,
     InventoryModule,
+    ItemCategoriesModule,
+    AgreementTemplateModule,
     EarningsModule,
     WithdrawalsModule,
     AuditLogsModule,

@@ -1,3 +1,4 @@
+import { PRINT_STYLE } from '../components/print/print-styles';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import html2pdf from 'html2pdf.js';
 
@@ -33,7 +34,11 @@ import { api, fileUrl } from '../lib/api';
 import { Dialog } from '../components/Dialog';
 import { JobOrderPayments } from '../components/JobOrderPayments';
 import { useAuthStore } from '../lib/auth-store';
-import type { AuthenticatedUser, Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderStatus, JobOrderType, SoftwareProduct } from '../lib/types';
+import type { AgreementVersion, AuthenticatedUser, Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderStatus, JobOrderType, SoftwareProduct, WarrantyTier } from '../lib/types';
+import { DOC_META, DOC_TYPES } from '../components/print/doc-types';
+import type { DocumentType as DocType } from '../lib/types';
+import { PrintTemplate, type LineItem } from '../components/print/PrintTemplate';
+import { ServiceAgreement } from '../components/print/ServiceAgreement';
 
 // Quick-add materials now come from the Inventory (Settings → Inventory Management).
 
@@ -232,15 +237,6 @@ function StepIndicator({ step, onStep, paymentsEnabled }: { step: number; onStep
 
 // ─── Line item helpers ────────────────────────────────────────────────────────
 
-interface LineItem {
-  _key: string; // local only
-  inventoryItemId?: string | null; // links to InventoryItem (used for stock deduction in Phase 2)
-  name: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-}
-
 let keySeq = 0;
 const newKey = () => String(++keySeq);
 
@@ -252,6 +248,7 @@ function fromSaved(item: JobOrderItem): LineItem {
     description: item.description ?? '',
     quantity: item.quantity,
     unitPrice: Number(item.unitPrice),
+    warrantyTier: item.warrantyTier ?? 'ACCESSORY',
   };
 }
 
@@ -264,39 +261,6 @@ function computeTotals(salePrice: number, discount: number, discountType: Discou
   const grandTotal = Math.max(0, subtotal - discountAmt);
   return { materialsTotal, subtotal, discountAmt, grandTotal };
 }
-
-// ─── Print CSS (injected once inside a useEffect, not at module scope) ───────
-
-const PRINT_STYLE = `
-@media print {
-  body * { visibility: hidden; }
-  #job-order-print, #job-order-print * { visibility: visible; }
-  #job-order-print {
-    display: block !important;
-    position: fixed;
-    inset: 0;
-    background: #fff;
-    color: #000;
-    padding: 15mm;
-    z-index: 99999;
-  }
-  #job-order-print::before {
-    content: "CONFIDENTIAL";
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) rotate(-45deg);
-    font-size: 80pt;
-    font-weight: 900;
-    color: rgba(0, 0, 0, 0.07);
-    white-space: nowrap;
-    letter-spacing: 0.15em;
-    pointer-events: none;
-    z-index: 99998;
-  }
-  @page { margin: 0; }
-}
-`;
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -361,6 +325,10 @@ export function JobOrderPage() {
     queryKey: ['company-profile'],
     queryFn: async () => (await api.get<CompanyProfile>('/company-profile')).data,
   });
+  const agreementTemplateQuery = useQuery({
+    queryKey: ['agreement-template'],
+    queryFn: async () => (await api.get<AgreementVersion | null>('/agreement-template')).data,
+  });
 
   // Preload the company logo as a base64 data URL so it embeds reliably in the
   // downloaded PDF (html2canvas cannot capture not-yet-loaded / tainted images).
@@ -394,8 +362,9 @@ export function JobOrderPage() {
   const [cameraRate, setCameraRate] = useState(0);
   const [laborPct, setLaborPct] = useState(20);
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [customForm, setCustomForm] = useState({ name: '', description: '', quantity: 1, unitPrice: 0 });
+  const [customForm, setCustomForm] = useState({ name: '', description: '', quantity: 1, unitPrice: 0, warrantyTier: 'ACCESSORY' as WarrantyTier });
   const [showCustomForm, setShowCustomForm] = useState(false);
+  const [includeAgreement, setIncludeAgreement] = useState(false);
 
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClientForm, setNewClientForm] = useState({
@@ -422,6 +391,7 @@ export function JobOrderPage() {
     setCameraRate(jo.cameraRate != null ? Number(jo.cameraRate) : 0);
     setLaborPct(jo.laborPct != null ? Number(jo.laborPct) : 20);
     setDocType(jo.docType ?? 'JOB_ORDER');
+    setIncludeAgreement(jo.includeAgreement ?? false);
   }, [jobOrderQuery.data]);
 
   // ── Auto-populate from parent record ──
@@ -463,12 +433,14 @@ export function JobOrderPage() {
           cameraRate: joType === 'CCTV' ? cameraRate : undefined,
           laborPct: joType === 'SIGNAGE' ? laborPct : undefined,
           docType: doc ?? docType,
-          items: items.map(({ name, description, quantity, unitPrice, inventoryItemId }) => ({
+          includeAgreement,
+          items: items.map(({ name, description, quantity, unitPrice, inventoryItemId, warrantyTier }) => ({
             name,
             description: description || undefined,
             quantity,
             unitPrice,
             inventoryItemId: inventoryItemId ?? undefined,
+            warrantyTier,
           })),
         })
       ).data,
@@ -481,6 +453,11 @@ export function JobOrderPage() {
         navigate(`/job-orders/order/${data.id}`, { replace: true });
       }
     },
+  });
+
+  const unpin = useMutation({
+    mutationFn: async () => api.delete(`/job-orders/${jo?.id}/pin-agreement`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['job-order', jobId ?? standaloneId] }),
   });
 
   // ── Convert standalone quotation → job order ──
@@ -547,6 +524,7 @@ export function JobOrderPage() {
         description: item.description ?? '',
         quantity: 1,
         unitPrice: Number(item.unitPrice),
+        warrantyTier: 'ACCESSORY',
       },
     ]);
   };
@@ -568,7 +546,7 @@ export function JobOrderPage() {
   const addCustom = (e: FormEvent) => {
     e.preventDefault();
     setItems((prev) => [...prev, { _key: newKey(), ...customForm }]);
-    setCustomForm({ name: '', description: '', quantity: 1, unitPrice: 0 });
+    setCustomForm({ name: '', description: '', quantity: 1, unitPrice: 0, warrantyTier: 'ACCESSORY' });
     setShowCustomForm(false);
   };
 
@@ -589,6 +567,18 @@ export function JobOrderPage() {
 
   const canSave = !!clientId && (joType === 'SOFTWARE' ? !!productId : true);
 
+  // The search box doubles as a filter: an unmatched barcode still submits on
+  // Enter, so filtering the buttons costs nothing.
+  const itemQuery = scanCode.trim().toLowerCase();
+  const quickAddItems = (inventoryQuery.data ?? []).filter((i) =>
+    itemQuery ? i.name.toLowerCase().includes(itemQuery) : true,
+  );
+
+  // A printed order reproduces the version it was pinned to; an unprinted one
+  // follows the current template.
+  const agreementSections =
+    jo?.agreementVersion?.sections ?? agreementTemplateQuery.data?.sections ?? [];
+
   // Payments require a saved order; fall back to step 2 if the order vanishes.
   const effectiveStep = step === 3 && !jo?.id ? 2 : step;
 
@@ -598,10 +588,25 @@ export function JobOrderPage() {
     : 0;
   const installerName = parent?.installer?.fullName;
 
+  /**
+   * Locks the agreement text to the current template the first time it reaches
+   * paper. A failure here must not stop the print — the pin retries next time.
+   */
+  const pinAgreement = async (id: string | undefined) => {
+    if (!includeAgreement || !id) return;
+    try {
+      await api.post(`/job-orders/${id}/pin-agreement`);
+      queryClient.invalidateQueries({ queryKey: ['job-order', jobId ?? standaloneId] });
+    } catch {
+      // Ignored on purpose — see the doc comment.
+    }
+  };
+
   const handlePrint = async () => {
     if (!canSave) return;
     // Save first so the print reflects the latest state
-    await upsert.mutateAsync({ status: jo?.status ?? 'DRAFT' });
+    const saved = await upsert.mutateAsync({ status: jo?.status ?? 'DRAFT' });
+    await pinAgreement(saved.id);
     window.print();
   };
 
@@ -620,20 +625,24 @@ export function JobOrderPage() {
     const element = document.getElementById('job-order-print');
     if (!element) return;
     if (canSave) {
-      await upsert.mutateAsync({ status: jo?.status ?? 'DRAFT' });
+      const saved = await upsert.mutateAsync({ status: jo?.status ?? 'DRAFT' });
+      await pinAgreement(saved.id);
     }
     setIsDownloading(true);
     const filename = `${DOC_META[docType].filePrefix}-${jo?.id.slice(0, 8).toUpperCase() ?? 'NEW'}.pdf`;
     element.style.display = 'block';
     try {
       await inlineImages(element);
-      await html2pdf().set({
-        margin: [10, 10],
-        filename,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      }).from(element).save();
+      await html2pdf()
+        .set({
+          margin: [10, 10] as [number, number],
+          filename,
+          image: { type: 'jpeg' as const, quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
+        })
+        .from(element)
+        .save();
     } finally {
       element.style.display = 'none';
       setIsDownloading(false);
@@ -716,6 +725,24 @@ export function JobOrderPage() {
           companyWebsite={companyProfileQuery.data?.website ?? undefined}
           companyTin={companyProfileQuery.data?.tin ?? undefined}
         />
+        {includeAgreement && agreementSections.length > 0 && (
+          <ServiceAgreement
+            sections={agreementSections}
+            values={{
+              date: jo?.createdAt,
+              clientName: client?.businessName,
+              clientAddress: client?.address,
+              clientOwner: client?.ownerName,
+              companyName: companyProfileQuery.data?.businessName,
+              companyAddress: companyProfileQuery.data?.address,
+              items: items.map((i) => ({
+                name: i.name,
+                quantity: i.quantity,
+                warrantyTier: i.warrantyTier,
+              })),
+            }}
+          />
+        )}
       </div>
 
       {/* ── Screen layout ───────────────────────────────────────────────────── */}
@@ -773,6 +800,20 @@ export function JobOrderPage() {
             >
               Finalize
             </button>
+            <label
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}
+              title="Appends the Service Level Agreement pages to the printed document"
+            >
+              <input
+                type="checkbox"
+                checked={includeAgreement}
+                onChange={(e) => setIncludeAgreement(e.target.checked)}
+              />
+              Include Service Agreement
+              {includeAgreement && items.length === 0 && (
+                <span style={{ color: 'var(--danger)' }}>— no materials, warranty lists will be empty</span>
+              )}
+            </label>
             <button
               type="button"
               className="btn btn-secondary"
@@ -793,6 +834,25 @@ export function JobOrderPage() {
             </button>
           </div>
         </div>
+
+        {jo?.agreementVersion && (
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>
+              Agreement locked to v{jo.agreementVersion.versionNo} ·{' '}
+              {new Date(jo.agreementVersion.createdAt).toLocaleDateString()}
+            </span>
+            {role === 'SUPER_ADMIN' && (
+              <button
+                type="button"
+                onClick={() => unpin.mutate()}
+                disabled={unpin.isPending}
+                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}
+              >
+                {unpin.isPending ? 'Unlocking…' : 'Unlock'}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Parent info banner */}
         {parent && (
@@ -921,21 +981,13 @@ export function JobOrderPage() {
 
               {/* Preset quick-add buttons (from Inventory) + barcode scan */}
               <div style={{ marginBottom: '1rem' }}>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>
-                  Quick Add
-                </div>
-
-                {/* Barcode scan-to-add */}
-                <form onSubmit={handleScan} style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem', maxWidth: 340 }}>
+                <form onSubmit={handleScan} style={{ marginBottom: '0.75rem' }}>
                   <input
                     value={scanCode}
+                    placeholder="Search items, or scan a barcode and press Enter"
+                    style={{ width: '100%' }}
                     onChange={(e) => { setScanCode(e.target.value); setScanError(''); }}
-                    placeholder="Scan or type barcode, then Enter"
-                    style={{ flex: 1, fontSize: '0.82rem' }}
                   />
-                  <button type="submit" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }}>
-                    Add
-                  </button>
                 </form>
                 {scanError && <p className="error-text" style={{ marginTop: 0 }}>{scanError}</p>}
 
@@ -946,7 +998,7 @@ export function JobOrderPage() {
                   </p>
                 )}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                  {inventoryQuery.data?.map((item) => (
+                  {quickAddItems.map((item) => (
                     <button
                       key={item.id}
                       type="button"
@@ -969,17 +1021,20 @@ export function JobOrderPage() {
                 <table style={{ marginBottom: '0.75rem' }}>
                   <thead>
                     <tr>
+                      <th style={{ width: 44 }}>#</th>
                       <th>Item</th>
                       <th>Description</th>
+                      {includeAgreement && <th style={{ width: 130 }}>Warranty</th>}
                       <th style={{ width: 60 }}>Qty</th>
-                      <th style={{ width: 120 }}>Unit Price (₱)</th>
-                      <th style={{ width: 100 }}>Subtotal</th>
+                      <th style={{ width: 120 }}>Price</th>
+                      <th style={{ width: 100 }}>Total</th>
                       <th style={{ width: 36 }}></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item) => (
+                    {items.map((item, index) => (
                       <tr key={item._key}>
+                        <td style={{ color: 'var(--text-muted)', textAlign: 'center' }}>{index + 1}</td>
                         <td>
                           <input
                             value={item.name}
@@ -994,6 +1049,19 @@ export function JobOrderPage() {
                             onChange={(e) => updateItem(item._key, { description: e.target.value })}
                           />
                         </td>
+                        {includeAgreement && (
+                          <td>
+                            <select
+                              value={item.warrantyTier}
+                              style={{ width: '100%', border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', fontSize: '0.85rem' }}
+                              onChange={(e) => updateItem(item._key, { warrantyTier: e.target.value as WarrantyTier })}
+                            >
+                              <option value="MAIN_SET">Main set</option>
+                              <option value="ACCESSORY">Accessory</option>
+                              <option value="NONE">Not covered</option>
+                            </select>
+                          </td>
+                        )}
                         <td>
                           <input
                             type="number"
@@ -1030,12 +1098,6 @@ export function JobOrderPage() {
                     ))}
                   </tbody>
                 </table>
-              )}
-
-              {items.length === 0 && (
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                  No materials added yet. Use the Quick Add buttons above or add a custom item below.
-                </p>
               )}
 
               {!showCustomForm && (
@@ -1425,202 +1487,3 @@ export function JobOrderPage() {
   );
 }
 
-// ─── Document types (same line items, different letterhead + footer) ─────────
-
-type DocType = 'JOB_ORDER' | 'QUOTATION' | 'INVOICE' | 'RECEIPT';
-
-const DOC_TYPES: { value: DocType; label: string; subtitle: string; filePrefix: string }[] = [
-  { value: 'JOB_ORDER', label: 'Job Order', subtitle: 'Job Order / Delivery Receipt', filePrefix: 'JO' },
-  { value: 'QUOTATION', label: 'Quotation', subtitle: 'Quotation / Price Estimate', filePrefix: 'QUO' },
-  { value: 'INVOICE', label: 'Sales Invoice', subtitle: 'Sales Invoice', filePrefix: 'INV' },
-  { value: 'RECEIPT', label: 'Official Receipt', subtitle: 'Official Receipt', filePrefix: 'OR' },
-];
-
-const DOC_META = Object.fromEntries(DOC_TYPES.map((d) => [d.value, d])) as Record<DocType, (typeof DOC_TYPES)[number]>;
-
-// ─── Print template (only visible when printing) ─────────────────────────────
-
-interface PrintTemplateProps {
-  docType: DocType;
-  jobId: string;
-  joNumber: string;
-  client?: Client;
-  product?: SoftwareProduct;
-  salePrice: number;
-  subtotal: number;
-  discountAmt: number;
-  materialsTotal: number;
-  grandTotal: number;
-  items: LineItem[];
-  remarks: string;
-  status: JobOrderStatus;
-  createdAt?: string;
-  companyName?: string;
-  companyLogoUrl?: string;
-  companyAddress?: string;
-  companyPhone?: string;
-  companyEmail?: string;
-  companyWebsite?: string;
-  companyTin?: string;
-}
-
-function PrintTemplate({
-  docType, jobId, joNumber, client, product,
-  salePrice, subtotal, discountAmt, materialsTotal, grandTotal,
-  items, remarks, status, createdAt, companyName, companyLogoUrl,
-  companyAddress, companyPhone, companyEmail, companyWebsite, companyTin,
-}: PrintTemplateProps) {
-  const p = (n: number) => `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const meta = DOC_META[docType];
-  const isReceipt = docType === 'RECEIPT';
-  const totalLabel = isReceipt ? 'AMOUNT PAID' : 'GRAND TOTAL';
-
-  return (
-    <div style={{ fontFamily: 'Arial, sans-serif', color: '#000', fontSize: '12pt', lineHeight: 1.5 }}>
-      {/* Header — logo + company (left), document meta (right) */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16pt', borderBottom: '2px solid #000', paddingBottom: '10pt', marginBottom: '14pt' }}>
-        <div style={{ display: 'flex', gap: '12pt', alignItems: 'center' }}>
-          {companyLogoUrl && (
-            <img
-              src={companyLogoUrl}
-              alt="Company logo"
-              style={{ height: '58pt', width: '58pt', objectFit: 'contain', flexShrink: 0 }}
-            />
-          )}
-          <div style={{ lineHeight: 1.35 }}>
-            <div style={{ fontSize: '15pt', fontWeight: 'bold' }}>
-              {companyName ?? 'SOFTWARE DEPLOYMENT & LICENSE MANAGEMENT'}
-            </div>
-            {companyAddress && <div style={{ fontSize: '8.5pt', color: '#333' }}>{companyAddress}</div>}
-            {(companyPhone || companyEmail) && (
-              <div style={{ fontSize: '8.5pt', color: '#333' }}>
-                {[companyPhone && `Tel: ${companyPhone}`, companyEmail].filter(Boolean).join('  •  ')}
-              </div>
-            )}
-            {companyWebsite && <div style={{ fontSize: '8.5pt', color: '#333' }}>{companyWebsite}</div>}
-            {companyTin && <div style={{ fontSize: '8.5pt', color: '#333' }}>TIN: {companyTin}</div>}
-          </div>
-        </div>
-        <div style={{ textAlign: 'right', minWidth: '150pt', flexShrink: 0 }}>
-          <div style={{ fontSize: '13pt', fontWeight: 'bold' }}>{meta.label} — {meta.filePrefix}-{joNumber}</div>
-          <div style={{ fontSize: '8.5pt', color: '#555', marginTop: '4pt' }}>Job ID: {jobId.slice(0, 8).toUpperCase()}</div>
-          <div style={{ fontSize: '8.5pt', color: '#555' }}>Status: {status}</div>
-          <div style={{ fontSize: '8.5pt', color: '#555' }}>Date: {createdAt ? new Date(createdAt).toLocaleDateString() : new Date().toLocaleDateString()}</div>
-          <div style={{ fontSize: '8.5pt', color: '#555' }}>Printed: {new Date().toLocaleString()}</div>
-        </div>
-      </div>
-
-      {/* Client info */}
-      <div style={{ border: '1px solid #ccc', borderRadius: '4pt', padding: '6pt 8pt', marginBottom: '8pt', lineHeight: 1.25, fontSize: '10pt' }}>
-        <strong>Client Information</strong>
-        <div style={{ marginTop: '3pt', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2pt' }}>
-          <div><strong>Business Name:</strong> {client?.businessName ?? '—'}</div>
-          <div><strong>Client Code:</strong> {client?.clientCode ?? '—'}</div>
-          <div><strong>Owner:</strong> {client?.ownerName ?? '—'}</div>
-          <div><strong>Contact:</strong> {client?.contactNo ?? '—'}</div>
-          {client?.address && <div style={{ gridColumn: '1/-1' }}><strong>Address:</strong> {client.address}</div>}
-        </div>
-      </div>
-
-      {/* Software Main Item */}
-      <div style={{ border: '1px solid #ccc', borderRadius: '4pt', padding: '10pt', marginBottom: '16pt' }}>
-        <strong>System / Software</strong>
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '8pt', fontSize: '11pt' }}>
-          <thead>
-            <tr style={{ background: '#f0f0f0' }}>
-              <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Item</th>
-              <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Details</th>
-              <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Price</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style={{ border: '1px solid #ccc', padding: '6pt' }}>
-                {product?.productName ?? '—'}
-              </td>
-              <td style={{ border: '1px solid #ccc', padding: '6pt' }}>
-                v{product?.version ?? '—'}
-              </td>
-              <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(salePrice)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      {/* Materials */}
-      {items.length > 0 && (
-        <div style={{ border: '1px solid #ccc', borderRadius: '4pt', padding: '10pt', marginBottom: '16pt' }}>
-          <strong>Materials / Hardware Package</strong>
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '8pt', fontSize: '11pt' }}>
-            <thead>
-              <tr style={{ background: '#f0f0f0' }}>
-                <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Item</th>
-                <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Description</th>
-                <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'center' }}>Qty</th>
-                <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Unit Price</th>
-                <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Subtotal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item, i) => (
-                <tr key={i}>
-                  <td style={{ border: '1px solid #ccc', padding: '6pt' }}>{item.name}</td>
-                  <td style={{ border: '1px solid #ccc', padding: '6pt', color: '#555' }}>{item.description || '—'}</td>
-                  <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'center' }}>{item.quantity}</td>
-                  <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>{p(item.unitPrice)}</td>
-                  <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(item.quantity * item.unitPrice)}</td>
-                </tr>
-              ))}
-              <tr>
-                <td colSpan={4} style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>Materials Total</td>
-                <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(materialsTotal)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Totals */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16pt' }}>
-        <div style={{ border: '2px solid #000', borderRadius: '4pt', padding: '10pt 20pt', textAlign: 'right', minWidth: '160pt' }}>
-          {discountAmt > 0 && (
-            <>
-              <div style={{ fontSize: '10pt', color: '#555', display: 'flex', justifyContent: 'space-between', gap: '16pt' }}>
-                <span>Subtotal</span><span>{p(subtotal)}</span>
-              </div>
-              <div style={{ fontSize: '10pt', color: '#16a34a', display: 'flex', justifyContent: 'space-between', gap: '16pt', borderBottom: '1px solid #ccc', paddingBottom: '4pt', marginBottom: '4pt' }}>
-                <span>Discount</span><span>−{p(discountAmt)}</span>
-              </div>
-            </>
-          )}
-          <div style={{ fontSize: '10pt', color: '#555' }}>{totalLabel}</div>
-          <div style={{ fontSize: '18pt', fontWeight: 'bold' }}>{p(grandTotal)}</div>
-        </div>
-      </div>
-
-      {isReceipt && (
-        <div style={{ border: '1px solid #ccc', borderRadius: '4pt', padding: '10pt', marginBottom: '16pt', fontSize: '11pt' }}>
-          Received from <strong>{client?.businessName ?? 'the client'}</strong> the sum of
-          {' '}<strong>{p(grandTotal)}</strong> in full/partial payment for the items listed above.
-        </div>
-      )}
-
-      {remarks && (
-        <div style={{ border: '1px solid #ccc', borderRadius: '4pt', padding: '10pt', marginBottom: '16pt' }}>
-          <strong>Remarks / Notes</strong>
-          <div style={{ marginTop: '6pt' }}>{remarks}</div>
-        </div>
-      )}
-
-      {/* Signature block */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40pt', marginTop: '48pt' }}>
-        <div style={{ borderTop: '1px solid #000', paddingTop: '6pt', textAlign: 'center', fontSize: '10pt' }}>
-          {isReceipt ? 'Received payment by / Cashier' : 'Prepared by / Admin Staff'}
-        </div>
-        <div style={{ borderTop: '1px solid #000', paddingTop: '6pt', textAlign: 'center', fontSize: '10pt' }}>
-          {docType === 'QUOTATION' ? 'Conforme / Client Representative' : 'Received by / Client Representative'}
-        </div>
-      </div>
-    </div>
-  );
-}
