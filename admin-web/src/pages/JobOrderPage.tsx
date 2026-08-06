@@ -568,11 +568,12 @@ export function JobOrderPage() {
   const canSave = !!clientId && (joType === 'SOFTWARE' ? !!productId : true);
 
   // The search box doubles as a filter: an unmatched barcode still submits on
-  // Enter, so filtering the buttons costs nothing.
+  // Enter, so filtering the results costs nothing. Only show results once the
+  // user has typed something — an empty query shows nothing.
   const itemQuery = scanCode.trim().toLowerCase();
-  const quickAddItems = (inventoryQuery.data ?? []).filter((i) =>
-    itemQuery ? i.name.toLowerCase().includes(itemQuery) : true,
-  );
+  const quickAddItems = itemQuery
+    ? (inventoryQuery.data ?? []).filter((i) => i.name.toLowerCase().includes(itemQuery))
+    : [];
 
   // A printed order reproduces the version it was pinned to; an unprinted one
   // follows the current template.
@@ -979,41 +980,64 @@ export function JobOrderPage() {
             <section className="card">
               <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Materials / Package</h2>
 
-              {/* Preset quick-add buttons (from Inventory) + barcode scan */}
+              {/* Item search (filters + doubles as barcode scan) */}
               <div style={{ marginBottom: '1rem' }}>
-                <form onSubmit={handleScan} style={{ marginBottom: '0.75rem' }}>
+                <form onSubmit={handleScan} className="item-search-wrap">
+                  <span className="item-search-ico">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="m21 21-4.3-4.3" />
+                    </svg>
+                  </span>
                   <input
                     value={scanCode}
                     placeholder="Search items, or scan a barcode and press Enter"
-                    style={{ width: '100%' }}
+                    className="item-search-input"
                     onChange={(e) => { setScanCode(e.target.value); setScanError(''); }}
                   />
+                  <button type="submit" className="item-search-btn" title="Search" aria-label="Search">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="m21 21-4.3-4.3" />
+                    </svg>
+                  </button>
                 </form>
-                {scanError && <p className="error-text" style={{ marginTop: 0 }}>{scanError}</p>}
+                {scanError && <p className="error-text" style={{ marginTop: '0.5rem' }}>{scanError}</p>}
 
-                {inventoryQuery.isLoading && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Loading items…</p>}
+                {inventoryQuery.isLoading && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Loading items…</p>}
                 {inventoryQuery.data?.length === 0 && (
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
                     No inventory items yet. Add them under Settings → Inventory Management.
                   </p>
                 )}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                  {quickAddItems.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className="btn btn-secondary"
-                      style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem' }}
-                      title={item.description ?? undefined}
-                      onClick={() => addInventoryItem(item)}
-                    >
-                      + {item.name}
-                      <span style={{ color: item.lowStockAlert > 0 && item.stockQty <= item.lowStockAlert ? 'var(--danger)' : 'var(--text-muted)', marginLeft: '0.35rem' }}>
-                        ({item.stockQty})
-                      </span>
-                    </button>
-                  ))}
-                </div>
+
+                {itemQuery && quickAddItems.length > 0 && (
+                  <div className="item-search-results">
+                    {quickAddItems.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="item-search-result"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => { addInventoryItem(item); setScanCode(''); }}
+                      >
+                        <span className="isr-name">{item.name}</span>
+                        {item.description && <span className="isr-desc">{item.description}</span>}
+                        <span
+                          className="isr-qty"
+                          style={{ color: item.lowStockAlert > 0 && item.stockQty <= item.lowStockAlert ? 'var(--danger)' : 'var(--text-muted)' }}
+                        >
+                          {item.stockQty} in stock
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {itemQuery && quickAddItems.length === 0 && !inventoryQuery.isLoading && (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                    No items match "{scanCode}".
+                  </p>
+                )}
               </div>
 
               {/* Items table */}

@@ -441,6 +441,125 @@ select.input:focus {
 }
 
 /* ═══════════════════════════════════════
+   INLINE ITEM SEARCH (Job Order materials step)
+═══════════════════════════════════════ */
+.item-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.item-search-ico {
+  position: absolute;
+  left: 0.9rem;
+  display: flex;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.item-search-input {
+  width: 100%;
+  padding: 0.7rem 3rem 0.7rem 2.6rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 11px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.item-search-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.item-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+.item-search-wrap:focus-within .item-search-ico {
+  color: var(--accent);
+}
+
+.item-search-btn {
+  position: absolute;
+  right: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease;
+}
+
+.item-search-btn:hover {
+  color: var(--accent);
+  background: var(--accent-light);
+}
+
+.item-search-results {
+  margin-top: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow-y: auto;
+  max-height: 260px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.item-search-result {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.6rem 0.9rem;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.item-search-result:last-child {
+  border-bottom: none;
+}
+
+.item-search-result:hover {
+  background: var(--surface-hover);
+}
+
+.item-search-result .isr-name {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.item-search-result .isr-desc {
+  color: var(--text-muted);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-search-result .isr-qty {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════
    PROGRESS BAR
 ═══════════════════════════════════════ */
 .progress-track {
