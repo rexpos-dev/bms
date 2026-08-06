@@ -18,7 +18,7 @@ const EMPTY_FORM = {
   maintenanceFee: '',
 };
 
-export function ProductsPage() {
+export function InventoryManagementPage() {
   const [tab, setTab] = useState<string>('software');
 
   const categoriesQuery = useQuery({
@@ -41,7 +41,7 @@ export function ProductsPage() {
   return (
     <div>
       <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ marginBottom: '0.25rem' }}>Products</h1>
+        <h1 style={{ marginBottom: '0.25rem' }}>Inventory Management</h1>
         <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
           Licensable software systems and the hardware catalog, grouped by category.
         </p>

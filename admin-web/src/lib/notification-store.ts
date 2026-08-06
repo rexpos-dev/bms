@@ -34,7 +34,7 @@ const EVENT_MAP: Array<{ keywords: string[]; routes: string[]; label: string }> 
   { keywords: ['earning'], routes: ['/earnings'], label: 'Earnings updated' },
   { keywords: ['withdrawal'], routes: ['/withdrawals'], label: 'Withdrawals updated' },
   { keywords: ['client'], routes: ['/clients'], label: 'Client data updated' },
-  { keywords: ['product'], routes: ['/products'], label: 'Product updated' },
+  { keywords: ['product'], routes: ['/inventory'], label: 'Product updated' },
   { keywords: ['license'], routes: ['/licenses'], label: 'License updated' },
   { keywords: ['job', 'install'], routes: ['/jobs'], label: 'Installation updated' },
 ];

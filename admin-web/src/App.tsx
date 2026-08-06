@@ -17,7 +17,7 @@ import { JobOrdersPage } from './pages/JobOrdersPage';
 import { JobsPage } from './pages/JobsPage';
 import { LicensesPage } from './pages/LicensesPage';
 import { LoginPage } from './pages/LoginPage';
-import { ProductsPage } from './pages/ProductsPage';
+import { InventoryManagementPage } from './pages/InventoryManagementPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { UsersPage } from './pages/UsersPage';
@@ -115,10 +115,10 @@ function App() {
           }
         />
         <Route
-          path="/products"
+          path="/inventory"
           element={
             <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF']}>
-              <ProductsPage />
+              <InventoryManagementPage />
             </RequireAuth>
           }
         />
