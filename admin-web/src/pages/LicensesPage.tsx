@@ -742,8 +742,8 @@ export function LicensesPage() {
       {/* Tabs */}
       {isAdminRole && (
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '1.75rem' }}>
-          <TabButton label="Licenses" active={activeTab === 'licenses'} count={allLicenses.length} onClick={() => setActiveTab('licenses')} />
-          <TabButton label="NENPOS Clients" active={activeTab === 'nenpos'} count={nenposQuery.data?.length} onClick={() => setActiveTab('nenpos')} />
+          <TabButton label="Bhagoh Licenses" active={activeTab === 'licenses'} count={allLicenses.length} onClick={() => setActiveTab('licenses')} />
+          <TabButton label="NENPOS Licenses" active={activeTab === 'nenpos'} count={nenposQuery.data?.length} onClick={() => setActiveTab('nenpos')} />
         </div>
       )}
 
