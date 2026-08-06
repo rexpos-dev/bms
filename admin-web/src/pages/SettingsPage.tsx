@@ -6,18 +6,16 @@ import type { BackupFile, CompanyProfile, ResetModuleInfo } from '../lib/types';
 import { Dialog } from '../components/Dialog';
 import { AgreementTemplatePage } from './AgreementTemplatePage';
 import { AuditLogsPage } from './AuditLogsPage';
-import { InventoryPage } from './InventoryPage';
 import { KpiSettingsPage } from './KpiSettingsPage';
 import { UsersPage } from './UsersPage';
 
-type SettingsTab = 'company' | 'agreement' | 'users' | 'kpis' | 'inventory' | 'database' | 'audit';
+type SettingsTab = 'company' | 'agreement' | 'users' | 'kpis' | 'database' | 'audit';
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'company', label: 'Company Profile' },
   { id: 'agreement', label: 'Agreement' },
   { id: 'users', label: 'Users & Roles' },
   { id: 'kpis', label: 'KPI Settings' },
-  { id: 'inventory', label: 'Inventory Management' },
   { id: 'database', label: 'Database Management' },
   { id: 'audit', label: 'Audit Logs' },
 ];
@@ -741,7 +739,6 @@ export function SettingsPage() {
       {tab === 'agreement' && <AgreementTemplatePage />}
       {tab === 'users' && <UsersPage />}
       {tab === 'kpis' && <KpiSettingsPage />}
-      {tab === 'inventory' && <InventoryPage />}
       {tab === 'database' && <DatabaseManagementTab />}
       {tab === 'audit' && <AuditLogsPage />}
     </div>
