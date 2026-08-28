@@ -8,6 +8,7 @@ import { AuditLogsPage } from './pages/AuditLogsPage';
 import { ClientsPage } from './pages/ClientsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { DevProjectsPage } from './pages/DevProjectsPage';
+import { DevProjectDetailPage } from './pages/DevProjectDetailPage';
 import { DevelopersPage } from './pages/DevelopersPage';
 import { DownloadLeadsPage } from './pages/DownloadLeadsPage';
 import { EarningsPage } from './pages/EarningsPage';
@@ -53,6 +54,14 @@ function App() {
           element={
             <RequireAuth roles={['DEVELOPER', 'ADMIN_STAFF', 'SUPER_ADMIN']}>
               <DevProjectsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/dev-projects/:id"
+          element={
+            <RequireAuth roles={['DEVELOPER', 'ADMIN_STAFF', 'SUPER_ADMIN']}>
+              <DevProjectDetailPage />
             </RequireAuth>
           }
         />
