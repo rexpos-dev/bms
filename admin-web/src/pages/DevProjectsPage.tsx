@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { Dialog } from '../components/Dialog';
@@ -89,6 +90,7 @@ export function useTick(intervalMs: number, enabled: boolean) {
 export function DevProjectsPage() {
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
+  const navigate = useNavigate();
 
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState(EMPTY_CREATE_FORM);
@@ -389,6 +391,17 @@ export function DevProjectsPage() {
       <Dialog isOpen={!!viewProgressId} onClose={() => setViewProgressId(null)} title={viewProject?.name ?? 'Project Progress'} maxWidth={1000}>
         {viewProgressQuery.isLoading && <p>Loading…</p>}
         {viewProject && (
+          <>
+          <div style={{ marginBottom: '1rem', textAlign: 'right' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ fontSize: '0.8rem', padding: '0.3rem 0.75rem' }}
+              onClick={() => { navigate(`/dev-projects/${viewProject.id}`); setViewProgressId(null); }}
+            >
+              Open full page ↗
+            </button>
+          </div>
           <div className="dp-detail-grid">
             {/* Left column — status, progress, timeframe, description */}
             <section className="dp-detail-col" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -597,12 +610,24 @@ export function DevProjectsPage() {
             )}
             </section>
           </div>
+          </>
         )}
       </Dialog>
 
       <Dialog isOpen={!!selectedId} onClose={closeDetail} title={selectedProject?.name ?? ''} maxWidth={1100}>
         {detailQuery.isLoading && <p>Loading…</p>}
         {selectedProject && (
+          <>
+          <div style={{ marginBottom: '1rem', textAlign: 'right' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ fontSize: '0.8rem', padding: '0.3rem 0.75rem' }}
+              onClick={() => { navigate(`/dev-projects/${selectedProject.id}`); closeDetail(); }}
+            >
+              Open full page ↗
+            </button>
+          </div>
           <div className="dp-detail-grid">
             {/* Left column — summary, progress controls, session history */}
             <section className="dp-detail-col">
@@ -840,6 +865,7 @@ export function DevProjectsPage() {
             )}
             </section>
           </div>
+          </>
         )}
       </Dialog>
     </div>
