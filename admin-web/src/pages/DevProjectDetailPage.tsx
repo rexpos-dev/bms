@@ -16,13 +16,10 @@ import {
   fieldLabel,
   formatLiveDuration,
   formatMinutes,
-  formatTrackedVsTarget,
   progressBasis,
-  ReportChecklist,
-  TargetHoursEditor,
-  TimeframeEditor,
   useTick,
-} from './DevProjectsPage';
+} from './dev-project-helpers';
+import { ReportChecklist, TargetHoursEditor, TimeframeEditor } from './DevProjectsPage';
 
 const EMPTY_REPORT_FORM = { title: '', comment: '', taggedAdminId: '' };
 
@@ -31,6 +28,11 @@ export function DevProjectDetailPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['dev-projects'] });
+    qc.invalidateQueries({ queryKey: ['dev-active'] });
+  };
 
   const detailQuery = useQuery({
     queryKey: ['dev-projects', id],
@@ -118,11 +120,6 @@ export function DevProjectDetailPage() {
     addReport.mutate();
   };
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['dev-projects'] });
-    qc.invalidateQueries({ queryKey: ['dev-active'] });
-  };
-
   const startProject = useMutation({
     mutationFn: (projectId: string) => api.post(`/dev-projects/${projectId}/start`),
     onSuccess: invalidate,
@@ -206,12 +203,18 @@ export function DevProjectDetailPage() {
   };
 
   return (
-    <div style={{ padding: '2rem' }}>
+    <div>
       <button
         type="button"
         className="btn btn-secondary"
         style={{ marginBottom: '0.75rem', fontSize: '0.8rem' }}
-        onClick={() => navigate('/dev-projects')}
+        onClick={() => {
+          if (window.history.state && window.history.state.idx > 0) {
+            navigate(-1);
+          } else {
+            navigate('/dev-projects');
+          }
+        }}
       >
         ← Back to Software Development
       </button>
@@ -259,7 +262,7 @@ export function DevProjectDetailPage() {
                 </tr>
                 <tr>
                   <td style={{ padding: '0.25rem 0', fontWeight: 700 }}>Time tracked</td>
-                  <td style={{ padding: '0.25rem 0' }}>{formatTrackedVsTarget(project)}</td>
+                  <td style={{ padding: '0.25rem 0' }}>{formatLiveDuration(project)}</td>
                 </tr>
                 <tr>
                   <td style={{ padding: '0.25rem 0', fontWeight: 700 }}>Start date</td>
@@ -267,8 +270,26 @@ export function DevProjectDetailPage() {
                 </tr>
                 <tr>
                   <td style={{ padding: '0.25rem 0', fontWeight: 700 }}>Deadline</td>
-                  <td style={{ padding: '0.25rem 0' }}>{project.projectDeadline ? new Date(project.projectDeadline).toLocaleDateString() : 'Not set'}</td>
+                  <td style={{ padding: '0.25rem 0' }}>
+                    {project.projectDeadline
+                      ? `${new Date(project.projectDeadline).toLocaleDateString()}${
+                          daysRemaining(project) !== null
+                            ? (daysRemaining(project) ?? 0) < 0
+                              ? ` (${Math.abs(daysRemaining(project)!)} days overdue)`
+                              : ` (${daysRemaining(project)} days left)`
+                            : ''
+                        }`
+                      : 'Not set'}
+                  </td>
                 </tr>
+                {project.projectStart && project.projectDeadline && (
+                  <tr>
+                    <td style={{ padding: '0.25rem 0', fontWeight: 700 }}>Duration</td>
+                    <td style={{ padding: '0.25rem 0' }}>
+                      {Math.round((new Date(project.projectDeadline).getTime() - new Date(project.projectStart).getTime()) / (1000 * 60 * 60 * 24))} days total
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
 
@@ -300,14 +321,18 @@ export function DevProjectDetailPage() {
               </>
             )}
 
+            <h2 style={{ fontSize: '1rem', margin: '1rem 0 0.5rem' }}>Reports</h2>
+            {(!project.reports || project.reports.length === 0) && (
+              <p style={{ margin: 0 }}>No reports yet.</p>
+            )}
             {project.reports && project.reports.length > 0 && (
               <>
-                <h2 style={{ fontSize: '1rem', margin: '1rem 0 0.5rem' }}>Reports</h2>
                 {project.reports.map((report) => (
                   <div key={report.id} style={{ marginBottom: '0.75rem', pageBreakInside: 'avoid' }}>
-                    <div style={{ fontWeight: 700 }}>{report.title} — {report.status}</div>
+                    <div style={{ fontWeight: 700 }}>{report.title} — {report.status.replace(/_/g, ' ')}</div>
                     <div style={{ fontSize: '0.8rem', color: '#444', marginBottom: '0.25rem' }}>
                       {report.author?.fullName ?? 'Unknown'} · {new Date(report.createdAt).toLocaleString()}
+                      {report.taggedAdmin && <> · Tagged: {report.taggedAdmin.fullName}</>}
                     </div>
                     {report.checklist.length > 0 && (
                       <ul style={{ margin: '0 0 0.25rem', paddingLeft: '1.25rem' }}>
@@ -433,6 +458,11 @@ export function DevProjectDetailPage() {
                       )}
                     </div>
                   )}
+                  {updateTimeframe.isError && (
+                    <p className="error-text" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
+                      Failed to update timeframe. You may not have permission.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -444,6 +474,11 @@ export function DevProjectDetailPage() {
                     onSave={(h) => updateTargetHours.mutate({ projectId: project.id, targetHours: h })}
                     isPending={updateTargetHours.isPending}
                   />
+                  {updateTargetHours.isError && (
+                    <p className="error-text" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
+                      Failed to update target hours. You may not have permission.
+                    </p>
+                  )}
                   {!project.targetHours && (
                     <form onSubmit={handleProgressSubmit} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Manual %:</span>
@@ -488,7 +523,7 @@ export function DevProjectDetailPage() {
               {project.sessions && project.sessions.length > 0 && (
                 <div>
                   <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.5rem' }}>Session History</div>
-                  <div className="card" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: 260, overflowY: 'auto' }}>
+                  <div className="card" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                     {project.sessions.map((s, i) => (
                       <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '0.75rem', fontSize: '0.85rem', padding: '0.4rem 0', borderBottom: i < (project.sessions?.length ?? 0) - 1 ? '1px solid var(--border)' : 'none' }}>
                         <div>
@@ -511,7 +546,7 @@ export function DevProjectDetailPage() {
 
               <div>
                 <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.5rem' }}>Reports</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: 380, overflowY: 'auto' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {(!project.reports || project.reports.length === 0) && (
                     <p style={{ color: 'var(--text-muted)', margin: 0 }}>No reports yet.</p>
                   )}
