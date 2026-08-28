@@ -2,20 +2,25 @@ import { type FormEvent, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { Linkify } from '../components/Linkify';
 import { ProgressBar } from '../components/ProgressBar';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuthStore } from '../lib/auth-store';
-import type { DevProject } from '../lib/types';
+import type { ChecklistItem, DevProject, DevProjectReport } from '../lib/types';
 import {
   computeProgress,
   daysRemaining,
   fieldLabel,
   formatLiveDuration,
+  formatMinutes,
   progressBasis,
+  ReportChecklist,
   TargetHoursEditor,
   TimeframeEditor,
   useTick,
 } from './DevProjectsPage';
+
+const EMPTY_REPORT_FORM = { title: '', comment: '', taggedAdminId: '' };
 
 export function DevProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -39,7 +44,75 @@ export function DevProjectDetailPage() {
   const isOwner = !!project && project.developerId === user?.id;
   const canControl = isOwner;
   const canTagAdmins = user?.role === 'DEVELOPER' || isSuperAdmin;
-  void canTagAdmins; // used starting Task 5
+  const reviewersQuery = useQuery({
+    queryKey: ['dev-projects', 'reviewers'],
+    queryFn: async () => (await api.get<{ id: string; fullName: string; role: string }[]>('/dev-projects/reviewers')).data,
+    enabled: canTagAdmins,
+  });
+
+  const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, string>>({});
+  const [reportForm, setReportForm] = useState(EMPTY_REPORT_FORM);
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
+  const [checklistInput, setChecklistInput] = useState('');
+
+  const updateChecklistItem = useMutation({
+    mutationFn: ({ reportId, index, done, note }: { reportId: string; index: number; done?: boolean; note?: string }) =>
+      api.patch<DevProject>(`/dev-projects/reports/${reportId}/checklist`, { index, done, note }),
+    onSuccess: (res) => {
+      if (id) qc.setQueryData(['dev-projects', id], res.data);
+      invalidate();
+    },
+  });
+
+  const addFeedback = useMutation({
+    mutationFn: (reportId: string) =>
+      api.post<DevProject>(`/dev-projects/reports/${reportId}/feedback`, { message: (feedbackDrafts[reportId] ?? '').trim() }),
+    onSuccess: (res, reportId) => {
+      if (id) qc.setQueryData(['dev-projects', id], res.data);
+      invalidate();
+      setFeedbackDrafts((prev) => ({ ...prev, [reportId]: '' }));
+    },
+  });
+
+  const addReport = useMutation({
+    mutationFn: () =>
+      api.post<DevProject>(`/dev-projects/${id}/reports`, {
+        title: reportForm.title.trim(),
+        comment: reportForm.comment.trim() || undefined,
+        checklist: checklistItems.map((item) => ({ label: item.label, done: item.done })),
+        taggedAdminId: reportForm.taggedAdminId || undefined,
+      }),
+    onSuccess: (res) => {
+      if (id) qc.setQueryData(['dev-projects', id], res.data);
+      invalidate();
+      setReportForm(EMPTY_REPORT_FORM);
+      setChecklistItems([]);
+      setChecklistInput('');
+    },
+  });
+
+  const canEditChecklist = (report: DevProjectReport) => isSuperAdmin || report.authorId === user?.id;
+
+  const handleAddChecklistItem = () => {
+    const label = checklistInput.trim();
+    if (!label) return;
+    setChecklistItems((items) => [...items, { label, done: false }]);
+    setChecklistInput('');
+  };
+
+  const toggleDraftItem = (index: number) => {
+    setChecklistItems((items) => items.map((item, i) => (i === index ? { ...item, done: !item.done } : item)));
+  };
+
+  const removeDraftItem = (index: number) => {
+    setChecklistItems((items) => items.filter((_, i) => i !== index));
+  };
+
+  const handleReportSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!reportForm.title.trim()) return;
+    addReport.mutate();
+  };
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['dev-projects'] });
@@ -262,7 +335,170 @@ export function DevProjectDetailPage() {
             </section>
 
             <section className="dp-detail-col" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {/* Session history + reports added in Task 5 */}
+              {project.sessions && project.sessions.length > 0 && (
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.5rem' }}>Session History</div>
+                  <div className="card" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: 260, overflowY: 'auto' }}>
+                    {project.sessions.map((s, i) => (
+                      <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '0.75rem', fontSize: '0.85rem', padding: '0.4rem 0', borderBottom: i < (project.sessions?.length ?? 0) - 1 ? '1px solid var(--border)' : 'none' }}>
+                        <div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginBottom: '0.1rem' }}>Started</div>
+                          <div>{new Date(s.startedAt).toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginBottom: '0.1rem' }}>Ended</div>
+                          <div>{s.endedAt ? new Date(s.endedAt).toLocaleString() : <span style={{ color: 'var(--warning)' }}>In progress…</span>}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginBottom: '0.1rem' }}>Duration</div>
+                          <div style={{ fontWeight: 600 }}>{s.endedAt ? formatMinutes(s.minutes ?? 0) : '—'}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.5rem' }}>Reports</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: 380, overflowY: 'auto' }}>
+                  {(!project.reports || project.reports.length === 0) && (
+                    <p style={{ color: 'var(--text-muted)', margin: 0 }}>No reports yet.</p>
+                  )}
+                  {project.reports?.map((report) => {
+                    const canGiveFeedback = isSuperAdmin || (isAdminStaff && report.taggedAdminId === user?.id);
+                    return (
+                      <div key={report.id} style={{ border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.6rem 0.75rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{report.title}</span>
+                          <StatusBadge status={report.status} />
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
+                          {report.author?.fullName ?? 'Unknown'} · {new Date(report.createdAt).toLocaleString()}
+                          {report.taggedAdmin && <> · Tagged: {report.taggedAdmin.fullName}</>}
+                        </div>
+                        {report.checklist.length > 0 && (
+                          <ReportChecklist
+                            key={report.id}
+                            items={report.checklist}
+                            editable={canEditChecklist(report)}
+                            isPending={updateChecklistItem.isPending}
+                            onToggle={(index, done) => updateChecklistItem.mutate({ reportId: report.id, index, done })}
+                            onSaveNote={(index, note) => updateChecklistItem.mutate({ reportId: report.id, index, note })}
+                          />
+                        )}
+                        {report.comment && <div style={{ fontSize: '0.9rem', marginBottom: '0.4rem' }}><Linkify text={report.comment} /></div>}
+
+                        {report.feedback && report.feedback.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
+                            {report.feedback.map((f) => (
+                              <div key={f.id} style={{ fontSize: '0.85rem' }}>
+                                <span style={{ fontWeight: 600 }}>{f.author?.fullName ?? 'Admin'}</span>
+                                <span style={{ color: 'var(--text-muted)' }}> · {new Date(f.createdAt).toLocaleString()}</span>
+                                <div><Linkify text={f.message} /></div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {canGiveFeedback && (
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              if ((feedbackDrafts[report.id] ?? '').trim()) addFeedback.mutate(report.id);
+                            }}
+                            style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}
+                          >
+                            <input
+                              value={feedbackDrafts[report.id] ?? ''}
+                              onChange={(e) => setFeedbackDrafts((prev) => ({ ...prev, [report.id]: e.target.value }))}
+                              placeholder="Give feedback on this report…"
+                              style={{ flex: 1 }}
+                            />
+                            <button type="submit" className="btn btn-secondary" disabled={addFeedback.isPending}>
+                              {addFeedback.isPending ? 'Sending…' : 'Send'}
+                            </button>
+                          </form>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {canControl && (
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.5rem' }}>New report</div>
+                  <form onSubmit={handleReportSubmit}>
+                    <div className="field">
+                      <label htmlFor="dpd-report-title">Title</label>
+                      <input
+                        id="dpd-report-title"
+                        required
+                        value={reportForm.title}
+                        onChange={(e) => setReportForm({ ...reportForm, title: e.target.value })}
+                        placeholder="e.g., Weekly progress update"
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Checklist</label>
+                      {checklistItems.map((item, i) => (
+                        <label key={i} className="checklist-item">
+                          <input type="checkbox" checked={item.done} onChange={() => toggleDraftItem(i)} />
+                          <span style={{ flex: 1, textDecoration: item.done ? 'line-through' : 'none' }}>{item.label}</span>
+                          <button type="button" className="btn btn-secondary" style={{ padding: '0.1rem 0.5rem', fontSize: '0.75rem' }} onClick={() => removeDraftItem(i)}>
+                            Remove
+                          </button>
+                        </label>
+                      ))}
+                      <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem' }}>
+                        <input
+                          value={checklistInput}
+                          onChange={(e) => setChecklistInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddChecklistItem();
+                            }
+                          }}
+                          placeholder="Add a checklist item…"
+                          style={{ flex: 1 }}
+                        />
+                        <button type="button" className="btn btn-secondary" onClick={handleAddChecklistItem}>
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="dpd-report-comment">Comment (optional)</label>
+                      <textarea
+                        id="dpd-report-comment"
+                        rows={2}
+                        value={reportForm.comment}
+                        onChange={(e) => setReportForm({ ...reportForm, comment: e.target.value })}
+                        placeholder="Notes for the reviewer…"
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="dpd-report-tag">Tag admin to review (optional)</label>
+                      <select
+                        id="dpd-report-tag"
+                        value={reportForm.taggedAdminId}
+                        onChange={(e) => setReportForm({ ...reportForm, taggedAdminId: e.target.value })}
+                      >
+                        <option value="">No tag</option>
+                        {reviewersQuery.data?.map((r) => (
+                          <option key={r.id} value={r.id}>{r.fullName} ({r.role.replace(/_/g, ' ')})</option>
+                        ))}
+                      </select>
+                    </div>
+                    {addReport.isError && <p className="error-text">Failed to post report. Try again.</p>}
+                    <button type="submit" className="btn btn-primary" disabled={addReport.isPending || !reportForm.title.trim()}>
+                      {addReport.isPending ? 'Posting…' : 'Post report'}
+                    </button>
+                  </form>
+                </div>
+              )}
             </section>
           </div>
         </>
