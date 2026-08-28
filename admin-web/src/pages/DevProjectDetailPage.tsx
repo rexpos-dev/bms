@@ -1,8 +1,11 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import html2pdf from 'html2pdf.js';
 import { api } from '../lib/api';
 import { Linkify } from '../components/Linkify';
+import { DEV_PROJECT_PRINT_STYLE } from '../components/print/dev-project-print-styles';
+import { buildDevProjectReportFilename } from '../components/print/dev-project-report-filename.util';
 import { ProgressBar } from '../components/ProgressBar';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuthStore } from '../lib/auth-store';
@@ -13,6 +16,7 @@ import {
   fieldLabel,
   formatLiveDuration,
   formatMinutes,
+  formatTrackedVsTarget,
   progressBasis,
   ReportChecklist,
   TargetHoursEditor,
@@ -156,6 +160,42 @@ export function DevProjectDetailPage() {
 
   const [editingTimeframe, setEditingTimeframe] = useState(false);
 
+  useEffect(() => {
+    if (document.getElementById('dev-project-print-style')) return;
+    const style = document.createElement('style');
+    style.id = 'dev-project-print-style';
+    style.textContent = DEV_PROJECT_PRINT_STYLE;
+    document.head.appendChild(style);
+    return () => {
+      document.getElementById('dev-project-print-style')?.remove();
+    };
+  }, []);
+
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    const element = document.getElementById('dev-project-print');
+    if (!element || !project) return;
+    setIsDownloading(true);
+    const filename = buildDevProjectReportFilename(project.name, project.id);
+    element.style.display = 'block';
+    try {
+      await html2pdf()
+        .set({
+          margin: [10, 10] as [number, number],
+          filename,
+          image: { type: 'jpeg' as const, quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
+        })
+        .from(element)
+        .save();
+    } finally {
+      element.style.display = 'none';
+      setIsDownloading(false);
+    }
+  };
+
   const handleProgressSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!project) return;
@@ -184,6 +224,116 @@ export function DevProjectDetailPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
             <h1 style={{ margin: 0 }}>{project.name}</h1>
             <StatusBadge status={project.status} />
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                onClick={() => window.print()}
+              >
+                Print
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                disabled={isDownloading}
+                onClick={handleDownload}
+              >
+                {isDownloading ? 'Downloading…' : 'Download PDF'}
+              </button>
+            </div>
+          </div>
+
+          <div id="dev-project-print" style={{ display: 'none', padding: '1.5rem', fontFamily: 'Arial, sans-serif' }}>
+            <h1 style={{ margin: '0 0 0.25rem' }}>{project.name}</h1>
+            <p style={{ margin: '0 0 1rem', color: '#444' }}>
+              Status: {project.status.replace(/_/g, ' ')} · Progress: {computeProgress(project)}% ({progressBasis(project)})
+            </p>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '1rem', fontSize: '0.85rem' }}>
+              <tbody>
+                <tr>
+                  <td style={{ padding: '0.25rem 0', fontWeight: 700, width: '30%' }}>Developer</td>
+                  <td style={{ padding: '0.25rem 0' }}>{project.developer?.fullName ?? '—'}</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '0.25rem 0', fontWeight: 700 }}>Time tracked</td>
+                  <td style={{ padding: '0.25rem 0' }}>{formatTrackedVsTarget(project)}</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '0.25rem 0', fontWeight: 700 }}>Start date</td>
+                  <td style={{ padding: '0.25rem 0' }}>{project.projectStart ? new Date(project.projectStart).toLocaleDateString() : 'Not set'}</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '0.25rem 0', fontWeight: 700 }}>Deadline</td>
+                  <td style={{ padding: '0.25rem 0' }}>{project.projectDeadline ? new Date(project.projectDeadline).toLocaleDateString() : 'Not set'}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            {project.description && (
+              <p style={{ whiteSpace: 'pre-wrap', marginBottom: '1rem' }}>{project.description}</p>
+            )}
+
+            {project.sessions && project.sessions.length > 0 && (
+              <>
+                <h2 style={{ fontSize: '1rem', margin: '1rem 0 0.5rem' }}>Session History</h2>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left', borderBottom: '1px solid #000', padding: '0.25rem' }}>Started</th>
+                      <th style={{ textAlign: 'left', borderBottom: '1px solid #000', padding: '0.25rem' }}>Ended</th>
+                      <th style={{ textAlign: 'right', borderBottom: '1px solid #000', padding: '0.25rem' }}>Duration</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {project.sessions.map((s) => (
+                      <tr key={s.id}>
+                        <td style={{ padding: '0.25rem' }}>{new Date(s.startedAt).toLocaleString()}</td>
+                        <td style={{ padding: '0.25rem' }}>{s.endedAt ? new Date(s.endedAt).toLocaleString() : 'In progress'}</td>
+                        <td style={{ padding: '0.25rem', textAlign: 'right' }}>{s.endedAt ? formatMinutes(s.minutes ?? 0) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {project.reports && project.reports.length > 0 && (
+              <>
+                <h2 style={{ fontSize: '1rem', margin: '1rem 0 0.5rem' }}>Reports</h2>
+                {project.reports.map((report) => (
+                  <div key={report.id} style={{ marginBottom: '0.75rem', pageBreakInside: 'avoid' }}>
+                    <div style={{ fontWeight: 700 }}>{report.title} — {report.status}</div>
+                    <div style={{ fontSize: '0.8rem', color: '#444', marginBottom: '0.25rem' }}>
+                      {report.author?.fullName ?? 'Unknown'} · {new Date(report.createdAt).toLocaleString()}
+                    </div>
+                    {report.checklist.length > 0 && (
+                      <ul style={{ margin: '0 0 0.25rem', paddingLeft: '1.25rem' }}>
+                        {report.checklist.map((item, i) => (
+                          <li key={i}>
+                            {item.done ? '☑' : '☐'} {item.label}
+                            {item.done && item.doneAt && ` — ${new Date(item.doneAt).toLocaleString()}${item.doneBy ? ` (${item.doneBy})` : ''}`}
+                            {item.note && ` — "${item.note}"`}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {report.comment && <div style={{ fontSize: '0.85rem', marginBottom: '0.25rem' }}>{report.comment}</div>}
+                    {report.feedback && report.feedback.length > 0 && (
+                      <div style={{ paddingLeft: '1rem', borderLeft: '2px solid #ccc' }}>
+                        {report.feedback.map((f) => (
+                          <div key={f.id} style={{ fontSize: '0.8rem', marginBottom: '0.15rem' }}>
+                            <strong>{f.author?.fullName ?? 'Admin'}</strong> ({new Date(f.createdAt).toLocaleString()}): {f.message}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
           </div>
 
           <div className="dp-detail-grid">
