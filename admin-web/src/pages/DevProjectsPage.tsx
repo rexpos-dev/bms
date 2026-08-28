@@ -12,7 +12,7 @@ import type { ChecklistItem, DevProject, DevProjectReport } from '../lib/types';
 const EMPTY_CREATE_FORM = { name: '', description: '', developerId: '', targetHours: '' };
 
 /** Progress priority: targetHours (work budget) → date range → manual */
-function computeProgress(project: DevProject): number {
+export function computeProgress(project: DevProject): number {
   if (project.targetHours && project.targetHours > 0) {
     const trackedHours = project.totalMinutes / 60;
     return Math.min(100, Math.round((trackedHours / project.targetHours) * 100));
@@ -27,19 +27,19 @@ function computeProgress(project: DevProject): number {
   return project.progressPercent;
 }
 
-function progressBasis(project: DevProject): string {
+export function progressBasis(project: DevProject): string {
   if (project.targetHours) return 'hours-based';
   if (project.projectStart && project.projectDeadline) return 'date-based';
   return 'manual';
 }
 
-function daysRemaining(project: DevProject): number | null {
+export function daysRemaining(project: DevProject): number | null {
   if (!project.projectDeadline) return null;
   const diff = new Date(project.projectDeadline).getTime() - Date.now();
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
-function formatTrackedVsTarget(project: DevProject) {
+export function formatTrackedVsTarget(project: DevProject) {
   const trackedH = (project.totalMinutes / 60).toFixed(1);
   if (project.targetHours) {
     return `${trackedH}h / ${project.targetHours}h`;
@@ -48,11 +48,11 @@ function formatTrackedVsTarget(project: DevProject) {
 }
 const EMPTY_REPORT_FORM = { title: '', comment: '', taggedAdminId: '' };
 
-function fieldLabel(text: string) {
+export function fieldLabel(text: string) {
   return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>{text}</div>;
 }
 
-function formatMinutes(totalMinutes: number) {
+export function formatMinutes(totalMinutes: number) {
   const minutes = Math.max(0, Math.round(totalMinutes));
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
@@ -60,7 +60,7 @@ function formatMinutes(totalMinutes: number) {
   return `${m}m`;
 }
 
-function formatLiveDuration(project: DevProject) {
+export function formatLiveDuration(project: DevProject) {
   if (project.status !== 'IN_PROGRESS') {
     return formatMinutes(project.totalMinutes);
   }
@@ -77,7 +77,7 @@ function formatLiveDuration(project: DevProject) {
   return `${s}s`;
 }
 
-function useTick(intervalMs: number, enabled: boolean) {
+export function useTick(intervalMs: number, enabled: boolean) {
   const [, setTick] = useState(0);
   useEffect(() => {
     if (!enabled) return;
@@ -921,7 +921,7 @@ function DevProjectsTable({ data, isAdminRole, userId, onViewProgress, onStop, o
 
 // ── Target hours inline editor ────────────────────────────────────────────────
 
-function TargetHoursEditor({ current, onSave, isPending }: {
+export function TargetHoursEditor({ current, onSave, isPending }: {
   current: number | null;
   onSave: (hours: number | null) => void;
   isPending: boolean;
@@ -977,7 +977,7 @@ function TargetHoursEditor({ current, onSave, isPending }: {
  * a super admin) can tick items off and attach a short note; the tick date and
  * who ticked it are stamped by the API and shown under each done item.
  */
-function ReportChecklist({ items, editable, isPending, onToggle, onSaveNote }: {
+export function ReportChecklist({ items, editable, isPending, onToggle, onSaveNote }: {
   items: ChecklistItem[];
   editable: boolean;
   isPending: boolean;
@@ -1086,7 +1086,7 @@ function toDateInput(iso: string | null | undefined): string {
   return iso.slice(0, 10); // 'YYYY-MM-DD'
 }
 
-function TimeframeEditor({ project, onSave, onCancel, isPending }: {
+export function TimeframeEditor({ project, onSave, onCancel, isPending }: {
   project: DevProject;
   onSave: (dates: { projectStart: string | null; projectDeadline: string | null }) => void;
   onCancel: () => void;
