@@ -315,15 +315,16 @@ describe('LicensesService.update', () => {
     expect(result.status).toBe('PENDING');
   });
 
-  it('rejects updating a trial to a past expirationDate', async () => {
+  it('allows backdating a PENDING trial to a past expirationDate', async () => {
     const { service, prisma } = buildService();
     prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
       Promise.resolve(where.id ? pendingTrial() : null),
     );
+    const pastExpiry = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
 
-    await expect(
-      service.update('lic-1', { isTrial: true, expirationDate: new Date(Date.now() - 1000) }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    const result = await service.update('lic-1', { isTrial: true, expirationDate: pastExpiry });
+
+    expect(result.expirationDate).toBe(pastExpiry);
   });
 
   it('allows backdating an ACTIVATED trial to a past expirationDate', async () => {

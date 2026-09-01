@@ -971,15 +971,12 @@ export function LicensesPage() {
                       id="edit-trialExpiresAt"
                       type="date"
                       required
-                      min={editingLicense.status === 'ACTIVATED' ? undefined : tomorrowIsoDate()}
                       value={editForm.expirationDate}
                       onChange={(e) => setEditForm({ ...editForm, expirationDate: e.target.value })}
                     />
-                    {editingLicense.status === 'ACTIVATED' && (
-                      <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                        Already installed on-site — pick any date, including today or earlier, to match the real history.
-                      </p>
-                    )}
+                    <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      Any date is allowed here, including today or earlier, so you can match a real on-site install.
+                    </p>
                   </div>
                 ) : (
                   <div className="field">

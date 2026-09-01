@@ -209,13 +209,9 @@ export class LicensesService {
 
     if (newIsTrial) {
       if (dto.expirationDate) {
-        // An already-activated trial reflects a real on-site install; the admin may
-        // need to correct/backdate its expiry to match history. A PENDING or EXPIRED
-        // trial has no such history yet, so its expiry must still be picked forward.
-        const isActivatedEdit = existing.status === LicenseStatus.ACTIVATED;
-        if (!isActivatedEdit && dto.expirationDate.getTime() <= Date.now()) {
-          throw new BadRequestException('Trial expiry date must be in the future');
-        }
+        // Unlike creation, editing an existing license's expiry doesn't require a future
+        // date: the admin may be correcting/backdating it to match a real on-site install
+        // that predates this feature, regardless of the license's current status.
         data.expirationDate = dto.expirationDate;
         data.trialDays = daysBetween(new Date(), dto.expirationDate);
         if (existing.status === LicenseStatus.EXPIRED) {
