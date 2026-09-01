@@ -15,6 +15,25 @@ function fmtDate(val: string | null | undefined) {
   return val ? new Date(val).toLocaleDateString() : '—';
 }
 
+function toIsoDateLocal(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function tomorrowIsoDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return toIsoDateLocal(d);
+}
+
+function defaultTrialDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return toIsoDateLocal(d);
+}
+
 type Tone = 'normal' | 'muted' | 'danger';
 
 interface LicenseDatesView {
@@ -36,8 +55,9 @@ const TONE_COLOR: Record<Tone, string | undefined> = {
 
 /**
  * Display strings for a license's install (= activation) and expiry dates.
- * A trial's clock only starts at activation, so a PENDING trial has no expiry
- * date yet — it shows the rule ("30 days after install") instead of a blank.
+ * New trials get a fixed expirationDate at creation; only an old-style trial
+ * (created before that) has none until activation — it shows the day-count
+ * rule instead of a blank.
  */
 function licenseDates(license: License): LicenseDatesView {
   const installed = license.activationDate
@@ -598,13 +618,13 @@ export function LicensesPage() {
   const [productId, setProductId] = useState('');
   const [licenseKey, setLicenseKey] = useState('');
   const [isTrial, setIsTrial] = useState(false);
-  const [trialDays, setTrialDays] = useState(30);
+  const [trialExpiresAt, setTrialExpiresAt] = useState(defaultTrialDate());
   const [showForm, setShowForm] = useState(false);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [fingerprint, setFingerprint] = useState(EMPTY_FINGERPRINT_FORM);
   const [viewLicense, setViewLicense] = useState<License | null>(null);
   const [editingLicense, setEditingLicense] = useState<License | null>(null);
-  const [editForm, setEditForm] = useState({ licenseKey: '', clientId: '', productId: '', isTrial: false, trialDays: 30 });
+  const [editForm, setEditForm] = useState({ licenseKey: '', clientId: '', productId: '', isTrial: false, expirationDate: defaultTrialDate() });
   const [editError, setEditError] = useState('');
   const [licSearch, setLicSearch] = useState('');
   const [licStatus, setLicStatus] = useState('');
@@ -631,14 +651,14 @@ export function LicensesPage() {
   const generateLicense = useMutation({
     mutationFn: async () => {
       const payload = isTrial
-        ? { clientId, productId, isTrial: true, trialDays }
+        ? { clientId, productId, isTrial: true, expirationDate: new Date(`${trialExpiresAt}T23:59:59`).toISOString() }
         : { clientId, productId, licenseKey: licenseKey.trim() };
       return (await api.post<License>('/licenses', payload)).data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['licenses'] });
       setClientId(''); setProductId(''); setLicenseKey('');
-      setIsTrial(false); setTrialDays(30);
+      setIsTrial(false); setTrialExpiresAt(defaultTrialDate());
       setGenerateError(''); setShowForm(false);
     },
     onError: (err: any) => {
@@ -653,7 +673,7 @@ export function LicensesPage() {
       clientId: license.clientId,
       productId: license.productId,
       isTrial: license.isTrial,
-      trialDays: license.trialDays ?? 30,
+      expirationDate: license.expirationDate ? toIsoDateLocal(new Date(license.expirationDate)) : defaultTrialDate(),
     });
     setEditError('');
   };
@@ -664,7 +684,7 @@ export function LicensesPage() {
         clientId: editForm.clientId,
         productId: editForm.productId,
         isTrial: editForm.isTrial,
-        ...(editForm.isTrial ? { trialDays: editForm.trialDays } : { licenseKey: editForm.licenseKey.trim() }),
+        ...(editForm.isTrial ? { expirationDate: new Date(`${editForm.expirationDate}T23:59:59`).toISOString() } : { licenseKey: editForm.licenseKey.trim() }),
       };
       return (await api.patch<License>(`/licenses/${editingLicense!.id}`, payload)).data;
     },
@@ -751,7 +771,7 @@ export function LicensesPage() {
       {activeTab === 'licenses' && (
         <>
           {/* Add license dialog */}
-          <Dialog isOpen={showForm && !isDeveloper} onClose={() => { setShowForm(false); setGenerateError(''); setIsTrial(false); setTrialDays(30); }} title="Add License" maxWidth={480}>
+          <Dialog isOpen={showForm && !isDeveloper} onClose={() => { setShowForm(false); setGenerateError(''); setIsTrial(false); setTrialExpiresAt(defaultTrialDate()); }} title="Add License" maxWidth={480}>
             <form onSubmit={(e) => { e.preventDefault(); generateLicense.mutate(); }}>
               <div className="field">
                 <label>License type</label>
@@ -794,18 +814,18 @@ export function LicensesPage() {
               </div>
               {isTrial ? (
                 <div className="field">
-                  <label htmlFor="trialDays">Trial days</label>
+                  <label htmlFor="trialExpiresAt">Trial expires on</label>
                   <input
-                    id="trialDays"
-                    type="number"
-                    min={1}
-                    max={365}
+                    id="trialExpiresAt"
+                    type="date"
                     required
-                    value={trialDays}
-                    onChange={(e) => setTrialDays(Number(e.target.value))}
+                    min={tomorrowIsoDate()}
+                    value={trialExpiresAt}
+                    onChange={(e) => setTrialExpiresAt(e.target.value)}
                   />
                   <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                    A unique trial key is generated automatically. The countdown starts when the developer activates it on-site.
+                    A unique trial key is generated automatically. The trial expires on this exact
+                    date, whether or not the developer has activated it yet.
                   </p>
                 </div>
               ) : (
@@ -830,7 +850,7 @@ export function LicensesPage() {
                 <button type="submit" className="btn btn-primary" disabled={generateLicense.isPending} style={{ flex: 1 }}>
                   {generateLicense.isPending ? 'Saving…' : 'Save license'}
                 </button>
-                <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setGenerateError(''); setIsTrial(false); setTrialDays(30); }}>Cancel</button>
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setGenerateError(''); setIsTrial(false); setTrialExpiresAt(defaultTrialDate()); }}>Cancel</button>
               </div>
             </form>
           </Dialog>
@@ -884,7 +904,7 @@ export function LicensesPage() {
                   </span>
                 } />
                 <DetailRow label="Software Product" value={viewLicense.product?.productName ?? '—'} />
-                {viewLicense.isTrial && (
+                {viewLicense.isTrial && !viewLicense.expirationDate && (
                   <DetailRow label="Trial Period" value={`${viewLicense.trialDays ?? 30} days from install`} />
                 )}
                 <LicenseDateDetails license={viewLicense} />
@@ -946,15 +966,14 @@ export function LicensesPage() {
                 </div>
                 {editForm.isTrial ? (
                   <div className="field">
-                    <label htmlFor="edit-trialDays">Trial days</label>
+                    <label htmlFor="edit-trialExpiresAt">Trial expires on</label>
                     <input
-                      id="edit-trialDays"
-                      type="number"
-                      min={1}
-                      max={365}
+                      id="edit-trialExpiresAt"
+                      type="date"
                       required
-                      value={editForm.trialDays}
-                      onChange={(e) => setEditForm({ ...editForm, trialDays: Number(e.target.value) })}
+                      min={tomorrowIsoDate()}
+                      value={editForm.expirationDate}
+                      onChange={(e) => setEditForm({ ...editForm, expirationDate: e.target.value })}
                     />
                   </div>
                 ) : (

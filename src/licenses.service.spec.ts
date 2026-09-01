@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { LicensesService } from './licenses.service';
+import { LicensesService, daysBetween } from './licenses.service';
 
 function buildService() {
   const prisma = {
@@ -22,20 +22,54 @@ function buildService() {
 }
 
 describe('LicensesService.generate (trial)', () => {
-  it('auto-generates a unique TRIAL- key and defaults trialDays to 30', async () => {
+  function futureDate(days: number): Date {
+    return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  }
+
+  it('auto-generates a unique TRIAL- key and stores the picked expirationDate', async () => {
     const { service } = buildService();
-    const result = await service.generate({ clientId: 'client-1', productId: 'product-1', isTrial: true } as never);
+    const expiry = futureDate(30);
+    const result = await service.generate({
+      clientId: 'client-1',
+      productId: 'product-1',
+      isTrial: true,
+      expirationDate: expiry,
+    } as never);
     expect(result.licenseKey).toMatch(/^TRIAL-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
-    expect(result.trialDays).toBe(30);
     expect(result.isTrial).toBe(true);
     expect(result.status).toBe('PENDING');
-    expect(result.expirationDate).toBeNull();
+    expect(result.expirationDate).toBe(expiry);
+    expect(result.trialDays).toBe(30);
   });
 
-  it('honors an explicit trialDays value', async () => {
+  it('derives trialDays from a shorter expirationDate', async () => {
     const { service } = buildService();
-    const result = await service.generate({ clientId: 'client-1', productId: 'product-1', isTrial: true, trialDays: 14 } as never);
+    const result = await service.generate({
+      clientId: 'client-1',
+      productId: 'product-1',
+      isTrial: true,
+      expirationDate: futureDate(14),
+    } as never);
     expect(result.trialDays).toBe(14);
+  });
+
+  it('rejects trial creation with no expirationDate', async () => {
+    const { service } = buildService();
+    await expect(
+      service.generate({ clientId: 'client-1', productId: 'product-1', isTrial: true } as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects trial creation with a past expirationDate', async () => {
+    const { service } = buildService();
+    await expect(
+      service.generate({
+        clientId: 'client-1',
+        productId: 'product-1',
+        isTrial: true,
+        expirationDate: new Date(Date.now() - 1000),
+      } as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects a non-trial license with no key', async () => {
@@ -43,6 +77,14 @@ describe('LicensesService.generate (trial)', () => {
     await expect(
       service.generate({ clientId: 'client-1', productId: 'product-1' } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('daysBetween', () => {
+  it('rounds up to the next full day', () => {
+    const start = new Date('2026-09-01T00:00:00.000Z');
+    const end = new Date('2026-09-15T12:00:00.000Z');
+    expect(daysBetween(start, end)).toBe(15);
   });
 });
 
@@ -74,6 +116,74 @@ describe('LicensesService.activate (trial)', () => {
     expect(crypto.signLicenseToken).toHaveBeenCalledTimes(1);
     const passedExpiry = (crypto.signLicenseToken.mock.calls[0][1] as Date).getTime();
     expect(passedExpiry).toBe(expiry);
+  });
+
+  it('signs a new-style trial with the stored expirationDate unchanged', async () => {
+    const { service, prisma, crypto } = buildService();
+    const fixedExpiry = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
+    prisma.license.findUnique.mockResolvedValue({
+      id: 'lic-1',
+      status: 'PENDING',
+      isTrial: true,
+      trialDays: 999, // must be ignored — expirationDate already set
+      licenseKey: 'TRIAL-AAAA-BBBB',
+      clientId: 'client-1',
+      productId: 'product-1',
+      expirationDate: fixedExpiry,
+      client: {},
+      product: {},
+      activatedBy: null,
+    });
+
+    const result = await service.activate('lic-1', 'dev-1', {
+      fingerprint: { cpu: 'c', disk: 'd', mac: 'm' },
+    } as never);
+
+    expect(result.expirationDate).toBe(fixedExpiry);
+    const passedExpiry = crypto.signLicenseToken.mock.calls[0][1] as Date;
+    expect(passedExpiry).toBe(fixedExpiry);
+  });
+
+  it('rejects activating a PENDING trial past its expiration date', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockResolvedValue({
+      id: 'lic-1',
+      status: 'PENDING',
+      isTrial: true,
+      trialDays: 30,
+      licenseKey: 'TRIAL-AAAA-BBBB',
+      clientId: 'client-1',
+      productId: 'product-1',
+      expirationDate: new Date(Date.now() - 1000),
+      client: {},
+      product: {},
+      activatedBy: null,
+    });
+
+    await expect(
+      service.activate('lic-1', 'dev-1', { fingerprint: { cpu: 'c', disk: 'd', mac: 'm' } } as never),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('rejects activating a license that is already EXPIRED', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockResolvedValue({
+      id: 'lic-1',
+      status: 'EXPIRED',
+      isTrial: true,
+      trialDays: 30,
+      licenseKey: 'TRIAL-AAAA-BBBB',
+      clientId: 'client-1',
+      productId: 'product-1',
+      expirationDate: new Date(Date.now() - 100_000),
+      client: {},
+      product: {},
+      activatedBy: null,
+    });
+
+    await expect(
+      service.activate('lic-1', 'dev-1', { fingerprint: { cpu: 'c', disk: 'd', mac: 'm' } } as never),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });
 
@@ -139,7 +249,9 @@ describe('LicensesService.update', () => {
       Promise.resolve(where.id ? { ...pendingTrial(), status: 'ACTIVATED', isTrial: false } : null),
     );
 
-    await expect(service.update('lic-1', { isTrial: true })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.update('lic-1', { isTrial: true })).rejects.toThrow(
+      'An activated license cannot be changed back to a trial',
+    );
   });
 
   it('allows setting isTrial=true on a PENDING license', async () => {
@@ -147,16 +259,76 @@ describe('LicensesService.update', () => {
     prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
       Promise.resolve(where.id ? { ...pendingTrial(), isTrial: false, trialDays: null } : null),
     );
+    const expirationDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
 
-    const result = await service.update('lic-1', { isTrial: true, trialDays: 14 });
+    const result = await service.update('lic-1', { isTrial: true, expirationDate });
 
     expect(result.isTrial).toBe(true);
     expect(result.trialDays).toBe(14);
   });
+
+  it('requires expirationDate when converting a full license to a trial', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(where.id ? { ...pendingTrial(), isTrial: false, trialDays: null } : null),
+    );
+
+    await expect(service.update('lic-1', { isTrial: true })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('updates a trial expirationDate and recomputes trialDays', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(where.id ? pendingTrial() : null),
+    );
+    const newExpiry = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+    const result = await service.update('lic-1', { isTrial: true, expirationDate: newExpiry });
+
+    expect(result.expirationDate).toBe(newExpiry);
+    expect(result.trialDays).toBe(14);
+  });
+
+  it('restores status to PENDING when a never-activated EXPIRED trial gets a new future expirationDate', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(where.id ? { ...pendingTrial(), status: 'EXPIRED', activationDate: null } : null),
+    );
+    const newExpiry = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+    const result = await service.update('lic-1', { isTrial: true, expirationDate: newExpiry });
+
+    expect(result.status).toBe('PENDING');
+  });
+
+  it('restores status to PENDING (not ACTIVATED) when a previously-activated EXPIRED trial gets a new future expirationDate', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(
+        where.id ? { ...pendingTrial(), status: 'EXPIRED', activationDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } : null,
+      ),
+    );
+    const newExpiry = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+    const result = await service.update('lic-1', { isTrial: true, expirationDate: newExpiry });
+
+    expect(result.status).toBe('PENDING');
+  });
+
+  it('rejects updating a trial to a past expirationDate', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(where.id ? pendingTrial() : null),
+    );
+
+    await expect(
+      service.update('lic-1', { isTrial: true, expirationDate: new Date(Date.now() - 1000) }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
 });
 
 describe('LicensesService.expireOverdueLicenses', () => {
-  it('flips activated, past-expiry licenses to EXPIRED', async () => {
+  it('flips activated or pending, past-expiry licenses to EXPIRED', async () => {
     const { service, prisma } = buildService();
     prisma.license.updateMany.mockResolvedValue({ count: 2 });
 
@@ -164,8 +336,9 @@ describe('LicensesService.expireOverdueLicenses', () => {
 
     expect(prisma.license.updateMany).toHaveBeenCalledTimes(1);
     const arg = prisma.license.updateMany.mock.calls[0][0];
-    expect(arg.where.status).toBe('ACTIVATED');
+    expect(arg.where.status).toEqual({ in: ['PENDING', 'ACTIVATED'] });
     expect(arg.where.expirationDate.lt).toBeInstanceOf(Date);
+    expect(arg.where.expirationDate.not).toBeNull();
     expect(arg.data).toEqual({ status: 'EXPIRED' });
   });
 });

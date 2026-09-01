@@ -15,6 +15,11 @@ import { UpdateLicenseDto } from './update-license.dto';
 import { LicenseCryptoService } from './license-crypto.service';
 import { generateTrialKey } from './trial-key.util';
 
+/** Whole days between two dates, rounded up (used to derive a display-only trialDays). */
+export function daysBetween(start: Date, end: Date): number {
+  return Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+}
+
 @Injectable()
 export class LicensesService {
   private readonly logger = new Logger(LicensesService.name);
@@ -34,6 +39,12 @@ export class LicensesService {
     if (!product) throw new NotFoundException(`Software product ${dto.productId} not found`);
 
     if (dto.isTrial) {
+      if (!dto.expirationDate) {
+        throw new BadRequestException('Expiry date is required for a trial license');
+      }
+      if (dto.expirationDate.getTime() <= Date.now()) {
+        throw new BadRequestException('Trial expiry date must be in the future');
+      }
       const licenseKey = await this.generateUniqueTrialKey();
       return this.prisma.license.create({
         data: {
@@ -41,8 +52,8 @@ export class LicensesService {
           clientId: dto.clientId,
           productId: dto.productId,
           isTrial: true,
-          trialDays: dto.trialDays ?? 30,
-          expirationDate: null,
+          trialDays: daysBetween(new Date(), dto.expirationDate),
+          expirationDate: dto.expirationDate,
           status: LicenseStatus.PENDING,
         },
       });
@@ -110,12 +121,26 @@ export class LicensesService {
     if (license.status === LicenseStatus.ACTIVATED) {
       throw new ConflictException('License is already activated');
     }
+    if (license.status === LicenseStatus.EXPIRED) {
+      throw new ConflictException('This license has expired and can no longer be activated');
+    }
 
     const activationDate = new Date();
-    const expirationDate =
-      license.isTrial && license.trialDays
+
+    if (license.isTrial && license.expirationDate && license.expirationDate.getTime() <= activationDate.getTime()) {
+      throw new ConflictException(
+        `This trial expired on ${license.expirationDate.toLocaleDateString()} and can no longer be activated`,
+      );
+    }
+
+    // New-style trials and full licenses already have a fixed expirationDate — use it as-is.
+    // Old-style trials (created before fixed expiry dates existed) fall back to the legacy
+    // activation-based computation so pre-existing PENDING rows keep working.
+    const expirationDate: Date | null =
+      license.expirationDate ??
+      (license.isTrial && license.trialDays
         ? new Date(activationDate.getTime() + license.trialDays * 24 * 60 * 60 * 1000)
-        : license.expirationDate;
+        : null);
 
     const licenseToken = this.licenseCrypto.signLicenseToken(
       {
@@ -154,7 +179,7 @@ export class LicensesService {
   async update(id: string, dto: UpdateLicenseDto) {
     const existing = await this.findOne(id);
 
-    if (dto.isTrial === true && existing.status !== LicenseStatus.PENDING) {
+    if (dto.isTrial === true && !existing.isTrial && existing.status !== LicenseStatus.PENDING) {
       throw new BadRequestException('An activated license cannot be changed back to a trial');
     }
 
@@ -173,6 +198,7 @@ export class LicensesService {
       isTrial?: boolean;
       trialDays?: number | null;
       expirationDate?: Date | null;
+      status?: LicenseStatus;
     } = {};
 
     if (dto.licenseKey !== undefined) data.licenseKey = dto.licenseKey;
@@ -182,7 +208,20 @@ export class LicensesService {
     if (dto.isTrial !== undefined) data.isTrial = newIsTrial;
 
     if (newIsTrial) {
-      data.trialDays = dto.trialDays ?? existing.trialDays ?? 30;
+      if (dto.expirationDate) {
+        if (dto.expirationDate.getTime() <= Date.now()) {
+          throw new BadRequestException('Trial expiry date must be in the future');
+        }
+        data.expirationDate = dto.expirationDate;
+        data.trialDays = daysBetween(new Date(), dto.expirationDate);
+        if (existing.status === LicenseStatus.EXPIRED) {
+          data.status = LicenseStatus.PENDING;
+        }
+      } else if (!existing.isTrial) {
+        throw new BadRequestException('Expiry date is required for a trial license');
+      } else {
+        data.trialDays = dto.trialDays ?? existing.trialDays ?? 30;
+      }
     } else if (existing.isTrial) {
       // Converting trial -> full: drop the trial window entirely.
       data.trialDays = null;
@@ -197,15 +236,17 @@ export class LicensesService {
   }
 
   /**
-   * Daily sweep: mark activated licenses whose expiry has passed as EXPIRED so the
-   * admin dashboard reflects reality (trials and any regular license with an expiry).
-   * The signed JWT already enforces expiry on the client; this keeps the DB in sync.
+   * Daily sweep: mark licenses whose expiry has passed as EXPIRED so the admin
+   * dashboard reflects reality. Covers ACTIVATED licenses (trial or regular) and
+   * PENDING trials that were never activated before their fixed expiry date —
+   * the signed JWT already enforces expiry on the client for activated ones;
+   * this keeps the DB in sync and blocks late activation of overdue trials.
    */
   @Cron('0 2 * * *')
   async expireOverdueLicenses(): Promise<void> {
     const result = await this.prisma.license.updateMany({
       where: {
-        status: LicenseStatus.ACTIVATED,
+        status: { in: [LicenseStatus.PENDING, LicenseStatus.ACTIVATED] },
         expirationDate: { not: null, lt: new Date() },
       },
       data: { status: LicenseStatus.EXPIRED },
