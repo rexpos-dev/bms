@@ -623,7 +623,7 @@ export function LicensesPage() {
   const [fingerprint, setFingerprint] = useState(EMPTY_FINGERPRINT_FORM);
   const [viewLicense, setViewLicense] = useState<License | null>(null);
   const [editingLicense, setEditingLicense] = useState<License | null>(null);
-  const [editForm, setEditForm] = useState({ licenseKey: '', clientId: '', productId: '', isTrial: false, trialDays: 30 });
+  const [editForm, setEditForm] = useState({ licenseKey: '', clientId: '', productId: '', isTrial: false, expirationDate: defaultTrialDate() });
   const [editError, setEditError] = useState('');
   const [licSearch, setLicSearch] = useState('');
   const [licStatus, setLicStatus] = useState('');
@@ -672,7 +672,7 @@ export function LicensesPage() {
       clientId: license.clientId,
       productId: license.productId,
       isTrial: license.isTrial,
-      trialDays: license.trialDays ?? 30,
+      expirationDate: license.expirationDate ? license.expirationDate.slice(0, 10) : defaultTrialDate(),
     });
     setEditError('');
   };
@@ -683,7 +683,7 @@ export function LicensesPage() {
         clientId: editForm.clientId,
         productId: editForm.productId,
         isTrial: editForm.isTrial,
-        ...(editForm.isTrial ? { trialDays: editForm.trialDays } : { licenseKey: editForm.licenseKey.trim() }),
+        ...(editForm.isTrial ? { expirationDate: editForm.expirationDate } : { licenseKey: editForm.licenseKey.trim() }),
       };
       return (await api.patch<License>(`/licenses/${editingLicense!.id}`, payload)).data;
     },
@@ -965,15 +965,14 @@ export function LicensesPage() {
                 </div>
                 {editForm.isTrial ? (
                   <div className="field">
-                    <label htmlFor="edit-trialDays">Trial days</label>
+                    <label htmlFor="edit-trialExpiresAt">Trial expires on</label>
                     <input
-                      id="edit-trialDays"
-                      type="number"
-                      min={1}
-                      max={365}
+                      id="edit-trialExpiresAt"
+                      type="date"
                       required
-                      value={editForm.trialDays}
-                      onChange={(e) => setEditForm({ ...editForm, trialDays: Number(e.target.value) })}
+                      min={tomorrowIsoDate()}
+                      value={editForm.expirationDate}
+                      onChange={(e) => setEditForm({ ...editForm, expirationDate: e.target.value })}
                     />
                   </div>
                 ) : (
