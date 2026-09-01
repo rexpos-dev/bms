@@ -19,8 +19,9 @@ export class GenerateLicenseDto {
   @IsBoolean()
   isTrial?: boolean;
 
-  // Ignored on create — trialDays is now derived from expirationDate. Kept for
-  // backward compatibility with any external caller that still sends it.
+  // Ignored on create — trialDays is now derived from expirationDate. A caller
+  // that sends only trialDays (no expirationDate) is rejected; this field exists
+  // so a caller that already sends both isn't broken.
   @IsOptional()
   @IsInt()
   @Min(1)

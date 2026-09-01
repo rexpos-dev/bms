@@ -55,8 +55,9 @@ const TONE_COLOR: Record<Tone, string | undefined> = {
 
 /**
  * Display strings for a license's install (= activation) and expiry dates.
- * A trial's clock only starts at activation, so a PENDING trial has no expiry
- * date yet — it shows the rule ("30 days after install") instead of a blank.
+ * New trials get a fixed expirationDate at creation; only an old-style trial
+ * (created before that) has none until activation — it shows the day-count
+ * rule instead of a blank.
  */
 function licenseDates(license: License): LicenseDatesView {
   const installed = license.activationDate
@@ -650,7 +651,7 @@ export function LicensesPage() {
   const generateLicense = useMutation({
     mutationFn: async () => {
       const payload = isTrial
-        ? { clientId, productId, isTrial: true, expirationDate: trialExpiresAt }
+        ? { clientId, productId, isTrial: true, expirationDate: new Date(`${trialExpiresAt}T23:59:59`).toISOString() }
         : { clientId, productId, licenseKey: licenseKey.trim() };
       return (await api.post<License>('/licenses', payload)).data;
     },
@@ -683,7 +684,7 @@ export function LicensesPage() {
         clientId: editForm.clientId,
         productId: editForm.productId,
         isTrial: editForm.isTrial,
-        ...(editForm.isTrial ? { expirationDate: editForm.expirationDate } : { licenseKey: editForm.licenseKey.trim() }),
+        ...(editForm.isTrial ? { expirationDate: new Date(`${editForm.expirationDate}T23:59:59`).toISOString() } : { licenseKey: editForm.licenseKey.trim() }),
       };
       return (await api.patch<License>(`/licenses/${editingLicense!.id}`, payload)).data;
     },
@@ -903,7 +904,7 @@ export function LicensesPage() {
                   </span>
                 } />
                 <DetailRow label="Software Product" value={viewLicense.product?.productName ?? '—'} />
-                {viewLicense.isTrial && (
+                {viewLicense.isTrial && !viewLicense.expirationDate && (
                   <DetailRow label="Trial Period" value={`${viewLicense.trialDays ?? 30} days from install`} />
                 )}
                 <LicenseDateDetails license={viewLicense} />

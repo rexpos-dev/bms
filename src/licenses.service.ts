@@ -122,7 +122,7 @@ export class LicensesService {
       throw new ConflictException('License is already activated');
     }
     if (license.status === LicenseStatus.EXPIRED) {
-      throw new ConflictException('This trial has expired and can no longer be activated');
+      throw new ConflictException('This license has expired and can no longer be activated');
     }
 
     const activationDate = new Date();
@@ -179,7 +179,7 @@ export class LicensesService {
   async update(id: string, dto: UpdateLicenseDto) {
     const existing = await this.findOne(id);
 
-    if (dto.isTrial === true && existing.status !== LicenseStatus.PENDING) {
+    if (dto.isTrial === true && !existing.isTrial && existing.status !== LicenseStatus.PENDING) {
       throw new BadRequestException('An activated license cannot be changed back to a trial');
     }
 
@@ -213,6 +213,8 @@ export class LicensesService {
         }
         data.expirationDate = dto.expirationDate;
         data.trialDays = daysBetween(new Date(), dto.expirationDate);
+      } else if (!existing.isTrial) {
+        throw new BadRequestException('Expiry date is required for a trial license');
       } else {
         data.trialDays = dto.trialDays ?? existing.trialDays ?? 30;
       }

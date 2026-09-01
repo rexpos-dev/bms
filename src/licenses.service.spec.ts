@@ -257,11 +257,21 @@ describe('LicensesService.update', () => {
     prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
       Promise.resolve(where.id ? { ...pendingTrial(), isTrial: false, trialDays: null } : null),
     );
+    const expirationDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
 
-    const result = await service.update('lic-1', { isTrial: true, trialDays: 14 });
+    const result = await service.update('lic-1', { isTrial: true, expirationDate });
 
     expect(result.isTrial).toBe(true);
     expect(result.trialDays).toBe(14);
+  });
+
+  it('requires expirationDate when converting a full license to a trial', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(where.id ? { ...pendingTrial(), isTrial: false, trialDays: null } : null),
+    );
+
+    await expect(service.update('lic-1', { isTrial: true })).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('updates a trial expirationDate and recomputes trialDays', async () => {
