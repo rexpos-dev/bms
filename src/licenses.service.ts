@@ -207,7 +207,15 @@ export class LicensesService {
     if (dto.isTrial !== undefined) data.isTrial = newIsTrial;
 
     if (newIsTrial) {
-      data.trialDays = dto.trialDays ?? existing.trialDays ?? 30;
+      if (dto.expirationDate) {
+        if (dto.expirationDate.getTime() <= Date.now()) {
+          throw new BadRequestException('Trial expiry date must be in the future');
+        }
+        data.expirationDate = dto.expirationDate;
+        data.trialDays = daysBetween(new Date(), dto.expirationDate);
+      } else {
+        data.trialDays = dto.trialDays ?? existing.trialDays ?? 30;
+      }
     } else if (existing.isTrial) {
       // Converting trial -> full: drop the trial window entirely.
       data.trialDays = null;

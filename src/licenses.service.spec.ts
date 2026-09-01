@@ -263,6 +263,30 @@ describe('LicensesService.update', () => {
     expect(result.isTrial).toBe(true);
     expect(result.trialDays).toBe(14);
   });
+
+  it('updates a trial expirationDate and recomputes trialDays', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(where.id ? pendingTrial() : null),
+    );
+    const newExpiry = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+    const result = await service.update('lic-1', { isTrial: true, expirationDate: newExpiry });
+
+    expect(result.expirationDate).toBe(newExpiry);
+    expect(result.trialDays).toBe(14);
+  });
+
+  it('rejects updating a trial to a past expirationDate', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(where.id ? pendingTrial() : null),
+    );
+
+    await expect(
+      service.update('lic-1', { isTrial: true, expirationDate: new Date(Date.now() - 1000) }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
 });
 
 describe('LicensesService.expireOverdueLicenses', () => {

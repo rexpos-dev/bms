@@ -1,4 +1,5 @@
-import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsBoolean, IsDate, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class UpdateLicenseDto {
   @IsOptional()
@@ -18,9 +19,15 @@ export class UpdateLicenseDto {
   @IsBoolean()
   isTrial?: boolean;
 
+  // Ignored when expirationDate is also sent — kept for backward compatibility.
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(365)
   trialDays?: number;
+
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  expirationDate?: Date;
 }
