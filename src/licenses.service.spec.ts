@@ -117,6 +117,74 @@ describe('LicensesService.activate (trial)', () => {
     const passedExpiry = (crypto.signLicenseToken.mock.calls[0][1] as Date).getTime();
     expect(passedExpiry).toBe(expiry);
   });
+
+  it('signs a new-style trial with the stored expirationDate unchanged', async () => {
+    const { service, prisma, crypto } = buildService();
+    const fixedExpiry = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
+    prisma.license.findUnique.mockResolvedValue({
+      id: 'lic-1',
+      status: 'PENDING',
+      isTrial: true,
+      trialDays: 999, // must be ignored — expirationDate already set
+      licenseKey: 'TRIAL-AAAA-BBBB',
+      clientId: 'client-1',
+      productId: 'product-1',
+      expirationDate: fixedExpiry,
+      client: {},
+      product: {},
+      activatedBy: null,
+    });
+
+    const result = await service.activate('lic-1', 'dev-1', {
+      fingerprint: { cpu: 'c', disk: 'd', mac: 'm' },
+    } as never);
+
+    expect(result.expirationDate).toBe(fixedExpiry);
+    const passedExpiry = crypto.signLicenseToken.mock.calls[0][1] as Date;
+    expect(passedExpiry).toBe(fixedExpiry);
+  });
+
+  it('rejects activating a PENDING trial past its expiration date', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockResolvedValue({
+      id: 'lic-1',
+      status: 'PENDING',
+      isTrial: true,
+      trialDays: 30,
+      licenseKey: 'TRIAL-AAAA-BBBB',
+      clientId: 'client-1',
+      productId: 'product-1',
+      expirationDate: new Date(Date.now() - 1000),
+      client: {},
+      product: {},
+      activatedBy: null,
+    });
+
+    await expect(
+      service.activate('lic-1', 'dev-1', { fingerprint: { cpu: 'c', disk: 'd', mac: 'm' } } as never),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('rejects activating a license that is already EXPIRED', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockResolvedValue({
+      id: 'lic-1',
+      status: 'EXPIRED',
+      isTrial: true,
+      trialDays: 30,
+      licenseKey: 'TRIAL-AAAA-BBBB',
+      clientId: 'client-1',
+      productId: 'product-1',
+      expirationDate: new Date(Date.now() - 100_000),
+      client: {},
+      product: {},
+      activatedBy: null,
+    });
+
+    await expect(
+      service.activate('lic-1', 'dev-1', { fingerprint: { cpu: 'c', disk: 'd', mac: 'm' } } as never),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
 });
 
 describe('LicensesService.update', () => {

@@ -121,12 +121,26 @@ export class LicensesService {
     if (license.status === LicenseStatus.ACTIVATED) {
       throw new ConflictException('License is already activated');
     }
+    if (license.status === LicenseStatus.EXPIRED) {
+      throw new ConflictException('This trial has expired and can no longer be activated');
+    }
 
     const activationDate = new Date();
-    const expirationDate =
-      license.isTrial && license.trialDays
+
+    if (license.isTrial && license.expirationDate && license.expirationDate.getTime() <= activationDate.getTime()) {
+      throw new ConflictException(
+        `This trial expired on ${license.expirationDate.toLocaleDateString()} and can no longer be activated`,
+      );
+    }
+
+    // New-style trials and full licenses already have a fixed expirationDate — use it as-is.
+    // Old-style trials (created before fixed expiry dates existed) fall back to the legacy
+    // activation-based computation so pre-existing PENDING rows keep working.
+    const expirationDate: Date | null =
+      license.expirationDate ??
+      (license.isTrial && license.trialDays
         ? new Date(activationDate.getTime() + license.trialDays * 24 * 60 * 60 * 1000)
-        : license.expirationDate;
+        : null);
 
     const licenseToken = this.licenseCrypto.signLicenseToken(
       {
