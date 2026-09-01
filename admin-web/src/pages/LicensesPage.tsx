@@ -15,24 +15,23 @@ function fmtDate(val: string | null | undefined) {
   return val ? new Date(val).toLocaleDateString() : '—';
 }
 
-function todayIsoDate(): string {
-  // Used by Task 6 (Edit License dialog)
-  return new Date().toISOString().slice(0, 10);
+function toIsoDateLocal(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
-
-// Ensure todayIsoDate is recognized as used (for Task 6)
-void todayIsoDate;
 
 function tomorrowIsoDate(): string {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+  return toIsoDateLocal(d);
 }
 
 function defaultTrialDate(): string {
   const d = new Date();
   d.setDate(d.getDate() + 30);
-  return d.toISOString().slice(0, 10);
+  return toIsoDateLocal(d);
 }
 
 type Tone = 'normal' | 'muted' | 'danger';

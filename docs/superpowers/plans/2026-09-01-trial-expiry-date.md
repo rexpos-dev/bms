@@ -562,7 +562,7 @@ git commit -m "feat(licenses): support editing a trial's fixed expiration date"
 - Modify: `admin-web/src/pages/LicensesPage.tsx`
 
 **Interfaces:**
-- Produces: `todayIsoDate(): string`, `tomorrowIsoDate(): string`, `defaultTrialDate(): string` — module-level helpers in `LicensesPage.tsx`, reused by Task 6.
+- Produces: `tomorrowIsoDate(): string`, `defaultTrialDate(): string` — module-level helpers in `LicensesPage.tsx`, reused by Task 6. (An earlier draft also had a `todayIsoDate()` helper; it's intentionally omitted — nothing calls it.)
 - Consumes: `POST /licenses` now sent as `{ clientId, productId, isTrial: true, expirationDate: string }` for trials (backend already accepts an ISO date string into `@Type(() => Date)` per Task 1).
 
 - [ ] **Step 1: Add date helpers**
@@ -570,24 +570,27 @@ git commit -m "feat(licenses): support editing a trial's fixed expiration date"
 In `admin-web/src/pages/LicensesPage.tsx`, after the existing `fmtDate` helper (currently lines 14-16), add:
 
 ```ts
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
+function toIsoDateLocal(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function tomorrowIsoDate(): string {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+  return toIsoDateLocal(d);
 }
 
 function defaultTrialDate(): string {
   const d = new Date();
   d.setDate(d.getDate() + 30);
-  return d.toISOString().slice(0, 10);
+  return toIsoDateLocal(d);
 }
 ```
 
-(`tomorrowIsoDate` is used as the input's `min` — the backend rejects an expiry that isn't strictly in the future, so a same-day date would always be rejected on submit; picking tomorrow as the earliest selectable date keeps the picker and the validation in agreement.)
+(`tomorrowIsoDate` is used as the input's `min` — the backend rejects an expiry that isn't strictly in the future, so a same-day date would always be rejected on submit; picking tomorrow as the earliest selectable date keeps the picker and the validation in agreement. Building the ISO string from local `getFullYear`/`getMonth`/`getDate` — instead of `d.toISOString().slice(0, 10)` — matters here: `toISOString()` converts to UTC first, so for a user ahead of UTC, `d.setDate(d.getDate() + 1)` followed by a UTC-formatted string can still land on *today's* local date for part of the day, silently defeating the "must be strictly in the future" rule this helper exists to enforce.)
 
 - [ ] **Step 2: Replace the `trialDays` state with `trialExpiresAt`**
 
@@ -681,7 +684,7 @@ git commit -m "feat(admin-web): Add License trial form uses a date picker for th
 - Modify: `admin-web/src/pages/LicensesPage.tsx`
 
 **Interfaces:**
-- Consumes: `todayIsoDate`, `tomorrowIsoDate`, `defaultTrialDate` from Task 5 (same file).
+- Consumes: `tomorrowIsoDate`, `defaultTrialDate` from Task 5 (same file).
 - Consumes: `PATCH /licenses/:id` now sent with `expirationDate` (string) instead of `trialDays` (number) when `editForm.isTrial` is true (backend already accepts this per Task 4).
 
 - [ ] **Step 1: Replace `trialDays` with `expirationDate` in `editForm` state**
