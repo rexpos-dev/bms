@@ -17,3 +17,6 @@ dist
 
 downloads/*
 !downloads/.gitkeep
+
+# Claude Code worktrees/scratch state — not project source
+.claude/
