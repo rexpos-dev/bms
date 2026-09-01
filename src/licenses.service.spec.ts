@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { LicensesService } from './licenses.service';
+import { LicensesService, daysBetween } from './licenses.service';
 
 function buildService() {
   const prisma = {
@@ -22,20 +22,54 @@ function buildService() {
 }
 
 describe('LicensesService.generate (trial)', () => {
-  it('auto-generates a unique TRIAL- key and defaults trialDays to 30', async () => {
+  function futureDate(days: number): Date {
+    return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  }
+
+  it('auto-generates a unique TRIAL- key and stores the picked expirationDate', async () => {
     const { service } = buildService();
-    const result = await service.generate({ clientId: 'client-1', productId: 'product-1', isTrial: true } as never);
+    const expiry = futureDate(30);
+    const result = await service.generate({
+      clientId: 'client-1',
+      productId: 'product-1',
+      isTrial: true,
+      expirationDate: expiry,
+    } as never);
     expect(result.licenseKey).toMatch(/^TRIAL-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
-    expect(result.trialDays).toBe(30);
     expect(result.isTrial).toBe(true);
     expect(result.status).toBe('PENDING');
-    expect(result.expirationDate).toBeNull();
+    expect(result.expirationDate).toBe(expiry);
+    expect(result.trialDays).toBe(30);
   });
 
-  it('honors an explicit trialDays value', async () => {
+  it('derives trialDays from a shorter expirationDate', async () => {
     const { service } = buildService();
-    const result = await service.generate({ clientId: 'client-1', productId: 'product-1', isTrial: true, trialDays: 14 } as never);
+    const result = await service.generate({
+      clientId: 'client-1',
+      productId: 'product-1',
+      isTrial: true,
+      expirationDate: futureDate(14),
+    } as never);
     expect(result.trialDays).toBe(14);
+  });
+
+  it('rejects trial creation with no expirationDate', async () => {
+    const { service } = buildService();
+    await expect(
+      service.generate({ clientId: 'client-1', productId: 'product-1', isTrial: true } as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects trial creation with a past expirationDate', async () => {
+    const { service } = buildService();
+    await expect(
+      service.generate({
+        clientId: 'client-1',
+        productId: 'product-1',
+        isTrial: true,
+        expirationDate: new Date(Date.now() - 1000),
+      } as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects a non-trial license with no key', async () => {
@@ -43,6 +77,14 @@ describe('LicensesService.generate (trial)', () => {
     await expect(
       service.generate({ clientId: 'client-1', productId: 'product-1' } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('daysBetween', () => {
+  it('rounds up to the next full day', () => {
+    const start = new Date('2026-09-01T00:00:00.000Z');
+    const end = new Date('2026-09-15T12:00:00.000Z');
+    expect(daysBetween(start, end)).toBe(15);
   });
 });
 

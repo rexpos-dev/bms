@@ -15,6 +15,11 @@ import { UpdateLicenseDto } from './update-license.dto';
 import { LicenseCryptoService } from './license-crypto.service';
 import { generateTrialKey } from './trial-key.util';
 
+/** Whole days between two dates, rounded up (used to derive a display-only trialDays). */
+export function daysBetween(start: Date, end: Date): number {
+  return Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+}
+
 @Injectable()
 export class LicensesService {
   private readonly logger = new Logger(LicensesService.name);
@@ -34,6 +39,12 @@ export class LicensesService {
     if (!product) throw new NotFoundException(`Software product ${dto.productId} not found`);
 
     if (dto.isTrial) {
+      if (!dto.expirationDate) {
+        throw new BadRequestException('Expiry date is required for a trial license');
+      }
+      if (dto.expirationDate.getTime() <= Date.now()) {
+        throw new BadRequestException('Trial expiry date must be in the future');
+      }
       const licenseKey = await this.generateUniqueTrialKey();
       return this.prisma.license.create({
         data: {
@@ -41,8 +52,8 @@ export class LicensesService {
           clientId: dto.clientId,
           productId: dto.productId,
           isTrial: true,
-          trialDays: dto.trialDays ?? 30,
-          expirationDate: null,
+          trialDays: daysBetween(new Date(), dto.expirationDate),
+          expirationDate: dto.expirationDate,
           status: LicenseStatus.PENDING,
         },
       });

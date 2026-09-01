@@ -19,7 +19,8 @@ export class GenerateLicenseDto {
   @IsBoolean()
   isTrial?: boolean;
 
-  // Trial length in days (default 30). Only used when isTrial is true.
+  // Ignored on create — trialDays is now derived from expirationDate. Kept for
+  // backward compatibility with any external caller that still sends it.
   @IsOptional()
   @IsInt()
   @Min(1)
