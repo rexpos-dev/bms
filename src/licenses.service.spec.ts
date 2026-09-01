@@ -301,6 +301,20 @@ describe('LicensesService.update', () => {
     expect(result.status).toBe('PENDING');
   });
 
+  it('restores status to PENDING (not ACTIVATED) when a previously-activated EXPIRED trial gets a new future expirationDate', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(
+        where.id ? { ...pendingTrial(), status: 'EXPIRED', activationDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } : null,
+      ),
+    );
+    const newExpiry = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+    const result = await service.update('lic-1', { isTrial: true, expirationDate: newExpiry });
+
+    expect(result.status).toBe('PENDING');
+  });
+
   it('rejects updating a trial to a past expirationDate', async () => {
     const { service, prisma } = buildService();
     prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
