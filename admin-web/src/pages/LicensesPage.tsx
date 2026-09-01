@@ -15,6 +15,26 @@ function fmtDate(val: string | null | undefined) {
   return val ? new Date(val).toLocaleDateString() : '—';
 }
 
+function todayIsoDate(): string {
+  // Used by Task 6 (Edit License dialog)
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Ensure todayIsoDate is recognized as used (for Task 6)
+void todayIsoDate;
+
+function tomorrowIsoDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function defaultTrialDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d.toISOString().slice(0, 10);
+}
+
 type Tone = 'normal' | 'muted' | 'danger';
 
 interface LicenseDatesView {
@@ -598,7 +618,7 @@ export function LicensesPage() {
   const [productId, setProductId] = useState('');
   const [licenseKey, setLicenseKey] = useState('');
   const [isTrial, setIsTrial] = useState(false);
-  const [trialDays, setTrialDays] = useState(30);
+  const [trialExpiresAt, setTrialExpiresAt] = useState(defaultTrialDate());
   const [showForm, setShowForm] = useState(false);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [fingerprint, setFingerprint] = useState(EMPTY_FINGERPRINT_FORM);
@@ -631,14 +651,14 @@ export function LicensesPage() {
   const generateLicense = useMutation({
     mutationFn: async () => {
       const payload = isTrial
-        ? { clientId, productId, isTrial: true, trialDays }
+        ? { clientId, productId, isTrial: true, expirationDate: trialExpiresAt }
         : { clientId, productId, licenseKey: licenseKey.trim() };
       return (await api.post<License>('/licenses', payload)).data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['licenses'] });
       setClientId(''); setProductId(''); setLicenseKey('');
-      setIsTrial(false); setTrialDays(30);
+      setIsTrial(false); setTrialExpiresAt(defaultTrialDate());
       setGenerateError(''); setShowForm(false);
     },
     onError: (err: any) => {
@@ -751,7 +771,7 @@ export function LicensesPage() {
       {activeTab === 'licenses' && (
         <>
           {/* Add license dialog */}
-          <Dialog isOpen={showForm && !isDeveloper} onClose={() => { setShowForm(false); setGenerateError(''); setIsTrial(false); setTrialDays(30); }} title="Add License" maxWidth={480}>
+          <Dialog isOpen={showForm && !isDeveloper} onClose={() => { setShowForm(false); setGenerateError(''); setIsTrial(false); setTrialExpiresAt(defaultTrialDate()); }} title="Add License" maxWidth={480}>
             <form onSubmit={(e) => { e.preventDefault(); generateLicense.mutate(); }}>
               <div className="field">
                 <label>License type</label>
@@ -794,18 +814,18 @@ export function LicensesPage() {
               </div>
               {isTrial ? (
                 <div className="field">
-                  <label htmlFor="trialDays">Trial days</label>
+                  <label htmlFor="trialExpiresAt">Trial expires on</label>
                   <input
-                    id="trialDays"
-                    type="number"
-                    min={1}
-                    max={365}
+                    id="trialExpiresAt"
+                    type="date"
                     required
-                    value={trialDays}
-                    onChange={(e) => setTrialDays(Number(e.target.value))}
+                    min={tomorrowIsoDate()}
+                    value={trialExpiresAt}
+                    onChange={(e) => setTrialExpiresAt(e.target.value)}
                   />
                   <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                    A unique trial key is generated automatically. The countdown starts when the developer activates it on-site.
+                    A unique trial key is generated automatically. The trial expires on this exact
+                    date, whether or not the developer has activated it yet.
                   </p>
                 </div>
               ) : (
@@ -830,7 +850,7 @@ export function LicensesPage() {
                 <button type="submit" className="btn btn-primary" disabled={generateLicense.isPending} style={{ flex: 1 }}>
                   {generateLicense.isPending ? 'Saving…' : 'Save license'}
                 </button>
-                <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setGenerateError(''); setIsTrial(false); setTrialDays(30); }}>Cancel</button>
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setGenerateError(''); setIsTrial(false); setTrialExpiresAt(defaultTrialDate()); }}>Cancel</button>
               </div>
             </form>
           </Dialog>
