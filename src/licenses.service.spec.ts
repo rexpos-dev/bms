@@ -266,7 +266,7 @@ describe('LicensesService.update', () => {
 });
 
 describe('LicensesService.expireOverdueLicenses', () => {
-  it('flips activated, past-expiry licenses to EXPIRED', async () => {
+  it('flips activated or pending, past-expiry licenses to EXPIRED', async () => {
     const { service, prisma } = buildService();
     prisma.license.updateMany.mockResolvedValue({ count: 2 });
 
@@ -274,8 +274,9 @@ describe('LicensesService.expireOverdueLicenses', () => {
 
     expect(prisma.license.updateMany).toHaveBeenCalledTimes(1);
     const arg = prisma.license.updateMany.mock.calls[0][0];
-    expect(arg.where.status).toBe('ACTIVATED');
+    expect(arg.where.status).toEqual({ in: ['PENDING', 'ACTIVATED'] });
     expect(arg.where.expirationDate.lt).toBeInstanceOf(Date);
+    expect(arg.where.expirationDate.not).toBeNull();
     expect(arg.data).toEqual({ status: 'EXPIRED' });
   });
 });

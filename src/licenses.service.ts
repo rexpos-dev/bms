@@ -222,15 +222,17 @@ export class LicensesService {
   }
 
   /**
-   * Daily sweep: mark activated licenses whose expiry has passed as EXPIRED so the
-   * admin dashboard reflects reality (trials and any regular license with an expiry).
-   * The signed JWT already enforces expiry on the client; this keeps the DB in sync.
+   * Daily sweep: mark licenses whose expiry has passed as EXPIRED so the admin
+   * dashboard reflects reality. Covers ACTIVATED licenses (trial or regular) and
+   * PENDING trials that were never activated before their fixed expiry date —
+   * the signed JWT already enforces expiry on the client for activated ones;
+   * this keeps the DB in sync and blocks late activation of overdue trials.
    */
   @Cron('0 2 * * *')
   async expireOverdueLicenses(): Promise<void> {
     const result = await this.prisma.license.updateMany({
       where: {
-        status: LicenseStatus.ACTIVATED,
+        status: { in: [LicenseStatus.PENDING, LicenseStatus.ACTIVATED] },
         expirationDate: { not: null, lt: new Date() },
       },
       data: { status: LicenseStatus.EXPIRED },
