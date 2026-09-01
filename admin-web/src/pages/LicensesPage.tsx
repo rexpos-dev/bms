@@ -673,7 +673,7 @@ export function LicensesPage() {
       clientId: license.clientId,
       productId: license.productId,
       isTrial: license.isTrial,
-      expirationDate: license.expirationDate ? license.expirationDate.slice(0, 10) : defaultTrialDate(),
+      expirationDate: license.expirationDate ? toIsoDateLocal(new Date(license.expirationDate)) : defaultTrialDate(),
     });
     setEditError('');
   };

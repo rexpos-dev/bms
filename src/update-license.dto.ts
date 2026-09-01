@@ -19,7 +19,9 @@ export class UpdateLicenseDto {
   @IsBoolean()
   isTrial?: boolean;
 
-  // Ignored when expirationDate is also sent — kept for backward compatibility.
+  // Ignored when expirationDate is also sent. For a full->trial conversion, expirationDate is
+  // required regardless — trialDays alone won't work there; it's only sufficient when editing
+  // an already-existing trial's other fields.
   @IsOptional()
   @IsInt()
   @Min(1)

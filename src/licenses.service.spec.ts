@@ -249,7 +249,9 @@ describe('LicensesService.update', () => {
       Promise.resolve(where.id ? { ...pendingTrial(), status: 'ACTIVATED', isTrial: false } : null),
     );
 
-    await expect(service.update('lic-1', { isTrial: true })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.update('lic-1', { isTrial: true })).rejects.toThrow(
+      'An activated license cannot be changed back to a trial',
+    );
   });
 
   it('allows setting isTrial=true on a PENDING license', async () => {
@@ -285,6 +287,18 @@ describe('LicensesService.update', () => {
 
     expect(result.expirationDate).toBe(newExpiry);
     expect(result.trialDays).toBe(14);
+  });
+
+  it('restores status to PENDING when a never-activated EXPIRED trial gets a new future expirationDate', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(where.id ? { ...pendingTrial(), status: 'EXPIRED', activationDate: null } : null),
+    );
+    const newExpiry = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+    const result = await service.update('lic-1', { isTrial: true, expirationDate: newExpiry });
+
+    expect(result.status).toBe('PENDING');
   });
 
   it('rejects updating a trial to a past expirationDate', async () => {

@@ -198,6 +198,7 @@ export class LicensesService {
       isTrial?: boolean;
       trialDays?: number | null;
       expirationDate?: Date | null;
+      status?: LicenseStatus;
     } = {};
 
     if (dto.licenseKey !== undefined) data.licenseKey = dto.licenseKey;
@@ -213,6 +214,9 @@ export class LicensesService {
         }
         data.expirationDate = dto.expirationDate;
         data.trialDays = daysBetween(new Date(), dto.expirationDate);
+        if (existing.status === LicenseStatus.EXPIRED) {
+          data.status = existing.activationDate ? LicenseStatus.ACTIVATED : LicenseStatus.PENDING;
+        }
       } else if (!existing.isTrial) {
         throw new BadRequestException('Expiry date is required for a trial license');
       } else {
