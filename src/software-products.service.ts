@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { CreateProductDto } from './create-product.dto';
 import { UpdateProductDto } from './update-product.dto';
@@ -30,6 +30,15 @@ export class SoftwareProductsService {
 
   async remove(id: string) {
     await this.findOne(id);
+    const [licenseCount, jobOrderCount] = await Promise.all([
+      this.prisma.license.count({ where: { productId: id } }),
+      this.prisma.jobOrder.count({ where: { productId: id } }),
+    ]);
+    if (licenseCount > 0 || jobOrderCount > 0) {
+      throw new ConflictException(
+        `This product is used by ${licenseCount} license(s) and ${jobOrderCount} job order(s), and can't be deleted while they exist.`,
+      );
+    }
     await this.prisma.softwareProduct.delete({ where: { id } });
   }
 }

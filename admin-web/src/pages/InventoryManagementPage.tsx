@@ -95,43 +95,90 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
+function apiErrorMessage(err: unknown, fallback: string): string {
+  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+  if (Array.isArray(msg)) return msg.join(', ');
+  return msg ?? fallback;
+}
+
 function SoftwareTab() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<SoftwareProduct | null>(null);
+  const [formError, setFormError] = useState('');
 
   const productsQuery = useQuery({
     queryKey: ['products'],
     queryFn: async () => (await api.get<SoftwareProduct[]>('/software-products')).data,
   });
 
-  const createProduct = useMutation({
-    mutationFn: async () =>
-      (
-        await api.post<SoftwareProduct>('/software-products', {
-          productName: form.productName,
-          version: form.version,
-          licenseType: form.licenseType,
-          price: Number(form.price),
-          maintenanceFee: form.maintenanceFee ? Number(form.maintenanceFee) : undefined,
-        })
-      ).data,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      setForm(EMPTY_FORM);
-      setShowForm(false);
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['products'] });
+
+  const saveProduct = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        productName: form.productName,
+        version: form.version,
+        licenseType: form.licenseType,
+        price: Number(form.price),
+        maintenanceFee: form.maintenanceFee ? Number(form.maintenanceFee) : undefined,
+      };
+      if (editing) {
+        return (await api.patch<SoftwareProduct>(`/software-products/${editing.id}`, payload)).data;
+      }
+      return (await api.post<SoftwareProduct>('/software-products', payload)).data;
     },
+    onSuccess: () => {
+      invalidate();
+      setForm(EMPTY_FORM);
+      setEditing(null);
+      setShowForm(false);
+      setFormError('');
+    },
+    onError: (err) => setFormError(apiErrorMessage(err, 'Could not save the product. Check the fields and try again.')),
   });
+
+  const [deleteError, setDeleteError] = useState('');
+
+  const deleteProduct = useMutation({
+    mutationFn: (id: string) => api.delete(`/software-products/${id}`),
+    onSuccess: () => {
+      invalidate();
+      setDeleteError('');
+    },
+    onError: (err) => setDeleteError(apiErrorMessage(err, 'Could not delete the product.')),
+  });
+
+  const openAdd = () => {
+    setEditing(null);
+    setForm(EMPTY_FORM);
+    setFormError('');
+    setShowForm(true);
+  };
+
+  const openEdit = (product: SoftwareProduct) => {
+    setEditing(product);
+    setForm({
+      productName: product.productName,
+      version: product.version,
+      licenseType: product.licenseType,
+      price: String(product.price),
+      maintenanceFee: product.maintenanceFee ? String(product.maintenanceFee) : '',
+    });
+    setFormError('');
+    setShowForm(true);
+  };
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    createProduct.mutate();
+    saveProduct.mutate();
   };
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.5rem' }}>
-        <button type="button" className="btn btn-primary" onClick={() => setShowForm(true)}>
+        <button type="button" className="btn btn-primary" onClick={openAdd}>
           New product
         </button>
       </div>
@@ -139,7 +186,7 @@ function SoftwareTab() {
       <Dialog
         isOpen={showForm}
         onClose={() => setShowForm(false)}
-        title="New Product"
+        title={editing ? 'Edit Product' : 'New Product'}
         maxWidth={480}
       >
         <form onSubmit={handleSubmit}>
@@ -200,10 +247,10 @@ function SoftwareTab() {
               onChange={(e) => setForm({ ...form, maintenanceFee: e.target.value })}
             />
           </div>
-          {createProduct.isError && <p className="error-text">Could not save the product. Check the fields and try again.</p>}
+          {formError && <p className="error-text">{formError}</p>}
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
-            <button type="submit" className="btn btn-primary" disabled={createProduct.isPending} style={{ flex: 1 }}>
-              {createProduct.isPending ? 'Saving…' : 'Save product'}
+            <button type="submit" className="btn btn-primary" disabled={saveProduct.isPending} style={{ flex: 1 }}>
+              {saveProduct.isPending ? 'Saving…' : editing ? 'Save changes' : 'Save product'}
             </button>
             <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
               Cancel
@@ -212,12 +259,37 @@ function SoftwareTab() {
         </form>
       </Dialog>
 
-      <ProductsTable data={productsQuery.data ?? []} isLoading={productsQuery.isLoading} isError={productsQuery.isError} />
+      {deleteError && <p className="error-text" style={{ marginBottom: '1rem' }}>{deleteError}</p>}
+
+      <ProductsTable
+        data={productsQuery.data ?? []}
+        isLoading={productsQuery.isLoading}
+        isError={productsQuery.isError}
+        onEdit={openEdit}
+        onDelete={(product) => {
+          if (confirm(`Delete "${product.productName}"? This cannot be undone.`)) deleteProduct.mutate(product.id);
+        }}
+        deletePending={deleteProduct.isPending}
+      />
     </div>
   );
 }
 
-function ProductsTable({ data, isLoading, isError }: { data: SoftwareProduct[]; isLoading: boolean; isError: boolean }) {
+function ProductsTable({
+  data,
+  isLoading,
+  isError,
+  onEdit,
+  onDelete,
+  deletePending,
+}: {
+  data: SoftwareProduct[];
+  isLoading: boolean;
+  isError: boolean;
+  onEdit: (product: SoftwareProduct) => void;
+  onDelete: (product: SoftwareProduct) => void;
+  deletePending: boolean;
+}) {
   const [search, setSearch] = useState('');
   const filtered = data.filter((p) => matchesSearch(search, p.productName, p.version, p.licenseType.replace(/_/g, ' ')));
   const pg = usePagination(filtered);
@@ -239,6 +311,7 @@ function ProductsTable({ data, isLoading, isError }: { data: SoftwareProduct[]; 
                   <th>License type</th>
                   <th>Price</th>
                   <th>Maintenance fee</th>
+                  <th style={{ width: 160 }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -249,10 +322,31 @@ function ProductsTable({ data, isLoading, isError }: { data: SoftwareProduct[]; 
                     <td>{product.licenseType.replace(/_/g, ' ')}</td>
                     <td>₱{Number(product.price).toLocaleString()}</td>
                     <td>{product.maintenanceFee ? `₱${Number(product.maintenanceFee).toLocaleString()}` : '—'}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}
+                          onClick={() => onEdit(product)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                          disabled={deletePending}
+                          onClick={() => onDelete(product)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={5} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
+                  <tr><td colSpan={6} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
                 )}
               </tbody>
             </table>

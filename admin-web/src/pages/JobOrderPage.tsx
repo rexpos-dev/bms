@@ -34,7 +34,7 @@ import { api, fileUrl } from '../lib/api';
 import { Dialog } from '../components/Dialog';
 import { JobOrderPayments } from '../components/JobOrderPayments';
 import { useAuthStore } from '../lib/auth-store';
-import type { AgreementVersion, AuthenticatedUser, Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderStatus, JobOrderType, SoftwareProduct, WarrantyTier } from '../lib/types';
+import type { AgreementVersion, AuthenticatedUser, Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderPayments as JobOrderPaymentsSummary, JobOrderStatus, JobOrderType, SoftwareProduct, WarrantyTier } from '../lib/types';
 import { DOC_META, DOC_TYPES } from '../components/print/doc-types';
 import type { DocumentType as DocType } from '../lib/types';
 import { PrintTemplate, type LineItem } from '../components/print/PrintTemplate';
@@ -296,6 +296,13 @@ export function JobOrderPage() {
     },
     enabled: standalone ? !!standaloneId : !!jobId,
     retry: false,
+  });
+
+  // ── Fetch payments summary (for the printed down payment / balance lines) ──
+  const paymentsQuery = useQuery({
+    queryKey: ['job-order-payments', jobOrderQuery.data?.id],
+    queryFn: async () => (await api.get<JobOrderPaymentsSummary>(`/job-orders/${jobOrderQuery.data!.id}/payments`)).data,
+    enabled: !!jobOrderQuery.data?.id,
   });
 
   const role = useAuthStore((s) => s.user?.role);
@@ -714,6 +721,8 @@ export function JobOrderPage() {
           discountAmt={discountAmt}
           materialsTotal={materialsTotal}
           grandTotal={grandTotal}
+          amountPaid={paymentsQuery.data?.totalPaid}
+          balanceDue={paymentsQuery.data?.balance}
           items={items}
           remarks={remarks}
           status={jo?.status ?? 'DRAFT'}

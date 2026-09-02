@@ -24,6 +24,8 @@ interface PrintTemplateProps {
   discountAmt: number;
   materialsTotal: number;
   grandTotal: number;
+  amountPaid?: number;
+  balanceDue?: number;
   items: LineItem[];
   remarks: string;
   status: JobOrderStatus;
@@ -40,6 +42,7 @@ interface PrintTemplateProps {
 export function PrintTemplate({
   docType, jobId, joNumber, client, product,
   salePrice, subtotal, discountAmt, materialsTotal, grandTotal,
+  amountPaid, balanceDue,
   items, remarks, status, createdAt, companyName, companyLogoUrl,
   companyAddress, companyPhone, companyEmail, companyWebsite, companyTin,
 }: PrintTemplateProps) {
@@ -168,6 +171,16 @@ export function PrintTemplate({
           )}
           <div style={{ fontSize: '10pt', color: '#555' }}>{totalLabel}</div>
           <div style={{ fontSize: '18pt', fontWeight: 'bold' }}>{p(grandTotal)}</div>
+          {!isReceipt && !!amountPaid && amountPaid > 0 && (
+            <>
+              <div style={{ fontSize: '10pt', color: '#16a34a', display: 'flex', justifyContent: 'space-between', gap: '16pt', borderTop: '1px solid #ccc', marginTop: '4pt', paddingTop: '4pt' }}>
+                <span>Down Payment</span><span>{p(amountPaid)}</span>
+              </div>
+              <div style={{ fontSize: '10pt', fontWeight: 'bold', color: (balanceDue ?? 0) > 0 ? '#b91c1c' : '#16a34a', display: 'flex', justifyContent: 'space-between', gap: '16pt' }}>
+                <span>Balance</span><span>{p(balanceDue ?? 0)}</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
