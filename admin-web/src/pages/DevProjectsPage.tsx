@@ -1,4 +1,5 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { Dialog } from '../components/Dialog';
@@ -8,87 +9,24 @@ import { ProgressBar } from '../components/ProgressBar';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuthStore } from '../lib/auth-store';
 import type { ChecklistItem, DevProject, DevProjectReport } from '../lib/types';
+import {
+  computeProgress,
+  daysRemaining,
+  fieldLabel,
+  formatLiveDuration,
+  formatMinutes,
+  formatTrackedVsTarget,
+  progressBasis,
+  useTick,
+} from './dev-project-helpers';
 
 const EMPTY_CREATE_FORM = { name: '', description: '', developerId: '', targetHours: '' };
-
-/** Progress priority: targetHours (work budget) → date range → manual */
-function computeProgress(project: DevProject): number {
-  if (project.targetHours && project.targetHours > 0) {
-    const trackedHours = project.totalMinutes / 60;
-    return Math.min(100, Math.round((trackedHours / project.targetHours) * 100));
-  }
-  if (project.projectStart && project.projectDeadline) {
-    const start = new Date(project.projectStart).getTime();
-    const end = new Date(project.projectDeadline).getTime();
-    const now = Date.now();
-    const total = end - start;
-    if (total > 0) return Math.min(100, Math.max(0, Math.round(((now - start) / total) * 100)));
-  }
-  return project.progressPercent;
-}
-
-function progressBasis(project: DevProject): string {
-  if (project.targetHours) return 'hours-based';
-  if (project.projectStart && project.projectDeadline) return 'date-based';
-  return 'manual';
-}
-
-function daysRemaining(project: DevProject): number | null {
-  if (!project.projectDeadline) return null;
-  const diff = new Date(project.projectDeadline).getTime() - Date.now();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
-}
-
-function formatTrackedVsTarget(project: DevProject) {
-  const trackedH = (project.totalMinutes / 60).toFixed(1);
-  if (project.targetHours) {
-    return `${trackedH}h / ${project.targetHours}h`;
-  }
-  return formatMinutes(project.totalMinutes);
-}
 const EMPTY_REPORT_FORM = { title: '', comment: '', taggedAdminId: '' };
-
-function fieldLabel(text: string) {
-  return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>{text}</div>;
-}
-
-function formatMinutes(totalMinutes: number) {
-  const minutes = Math.max(0, Math.round(totalMinutes));
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function formatLiveDuration(project: DevProject) {
-  if (project.status !== 'IN_PROGRESS') {
-    return formatMinutes(project.totalMinutes);
-  }
-  // Current run = paused seconds banked so far + live segment (if not paused).
-  const elapsedSec = project.startedAt
-    ? Math.max(0, Math.floor((Date.now() - new Date(project.startedAt).getTime()) / 1000))
-    : 0;
-  const totalSec = project.totalMinutes * 60 + (project.runSeconds ?? 0) + elapsedSec;
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
-
-function useTick(intervalMs: number, enabled: boolean) {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    if (!enabled) return;
-    const id = setInterval(() => setTick((t) => t + 1), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs, enabled]);
-}
 
 export function DevProjectsPage() {
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
+  const navigate = useNavigate();
 
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState(EMPTY_CREATE_FORM);
@@ -389,6 +327,17 @@ export function DevProjectsPage() {
       <Dialog isOpen={!!viewProgressId} onClose={() => setViewProgressId(null)} title={viewProject?.name ?? 'Project Progress'} maxWidth={1000}>
         {viewProgressQuery.isLoading && <p>Loading…</p>}
         {viewProject && (
+          <>
+          <div style={{ marginBottom: '1rem', textAlign: 'right' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ fontSize: '0.8rem', padding: '0.3rem 0.75rem' }}
+              onClick={() => { navigate(`/dev-projects/${viewProject.id}`); setViewProgressId(null); }}
+            >
+              Open full page ↗
+            </button>
+          </div>
           <div className="dp-detail-grid">
             {/* Left column — status, progress, timeframe, description */}
             <section className="dp-detail-col" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -597,12 +546,24 @@ export function DevProjectsPage() {
             )}
             </section>
           </div>
+          </>
         )}
       </Dialog>
 
       <Dialog isOpen={!!selectedId} onClose={closeDetail} title={selectedProject?.name ?? ''} maxWidth={1100}>
         {detailQuery.isLoading && <p>Loading…</p>}
         {selectedProject && (
+          <>
+          <div style={{ marginBottom: '1rem', textAlign: 'right' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ fontSize: '0.8rem', padding: '0.3rem 0.75rem' }}
+              onClick={() => { navigate(`/dev-projects/${selectedProject.id}`); closeDetail(); }}
+            >
+              Open full page ↗
+            </button>
+          </div>
           <div className="dp-detail-grid">
             {/* Left column — summary, progress controls, session history */}
             <section className="dp-detail-col">
@@ -840,6 +801,7 @@ export function DevProjectsPage() {
             )}
             </section>
           </div>
+          </>
         )}
       </Dialog>
     </div>
@@ -921,7 +883,7 @@ function DevProjectsTable({ data, isAdminRole, userId, onViewProgress, onStop, o
 
 // ── Target hours inline editor ────────────────────────────────────────────────
 
-function TargetHoursEditor({ current, onSave, isPending }: {
+export function TargetHoursEditor({ current, onSave, isPending }: {
   current: number | null;
   onSave: (hours: number | null) => void;
   isPending: boolean;
@@ -977,7 +939,7 @@ function TargetHoursEditor({ current, onSave, isPending }: {
  * a super admin) can tick items off and attach a short note; the tick date and
  * who ticked it are stamped by the API and shown under each done item.
  */
-function ReportChecklist({ items, editable, isPending, onToggle, onSaveNote }: {
+export function ReportChecklist({ items, editable, isPending, onToggle, onSaveNote }: {
   items: ChecklistItem[];
   editable: boolean;
   isPending: boolean;
@@ -1086,7 +1048,7 @@ function toDateInput(iso: string | null | undefined): string {
   return iso.slice(0, 10); // 'YYYY-MM-DD'
 }
 
-function TimeframeEditor({ project, onSave, onCancel, isPending }: {
+export function TimeframeEditor({ project, onSave, onCancel, isPending }: {
   project: DevProject;
   onSave: (dates: { projectStart: string | null; projectDeadline: string | null }) => void;
   onCancel: () => void;
