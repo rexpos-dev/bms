@@ -46,7 +46,7 @@ export class PushOpDto {
 
 export class PushDto {
   @IsArray()
-  @ArrayMaxSize(200)
+  @ArrayMaxSize(1000)
   @ValidateNested({ each: true })
   @Type(() => PushOpDto)
   ops!: PushOpDto[];

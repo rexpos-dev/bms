@@ -8,15 +8,35 @@ export interface RawSqlClient {
   $transaction(queries: Promise<unknown>[]): Promise<unknown>;
 }
 
-/** Split a DDL script into statements, dropping `--` comment lines. */
+/**
+ * Split a SQL script into statements, dropping `--` comment lines. A statement ends
+ * at a line ending in `;` — except `CREATE TRIGGER`, whose body contains `;`, and which
+ * therefore ends only at a line that is exactly `END;`.
+ */
 export function splitSqlStatements(sql: string): string[] {
-  return sql
-    .split(/\r?\n/)
-    .filter((line) => !line.trim().startsWith('--'))
-    .join('\n')
-    .split(/;\s*(?:\n|$)/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const statements: string[] = [];
+  let current: string[] = [];
+  let inTrigger = false;
+
+  for (const raw of sql.split(/\r?\n/)) {
+    const line = raw.trimEnd();
+    if (current.length === 0) {
+      if (line.trim() === '' || line.trim().startsWith('--')) continue;
+      inTrigger = /^CREATE\s+TRIGGER\b/i.test(line.trim());
+    } else if (line.trim().startsWith('--')) {
+      continue;
+    }
+    current.push(line);
+    const done = inTrigger ? line.trim() === 'END;' : line.endsWith(';');
+    if (done) {
+      statements.push(current.join('\n').replace(/;\s*$/, '').trim());
+      current = [];
+      inTrigger = false;
+    }
+  }
+  const rest = current.join('\n').trim();
+  if (rest) statements.push(rest);
+  return statements;
 }
 
 /**

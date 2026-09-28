@@ -22,3 +22,6 @@ downloads/*
 
 # Claude Code worktrees/scratch state — not project source
 .claude/
+
+# Built server used by src/sync.e2e.spec.ts
+/.e2e-dist

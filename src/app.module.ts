@@ -31,6 +31,7 @@ import { PaymentsModule } from './payments.module';
 import { PrismaModule } from './prisma.module';
 import { SoftwareProductsModule } from './software-products.module';
 import { SyncModule } from './sync.module';
+import { SyncAgentModule } from './sync-agent.module';
 import { DownloadLeadsModule } from './download-leads.module';
 import { UploadsModule } from './uploads.module';
 import { UsersModule } from './users.module';
@@ -100,6 +101,7 @@ const serverOnlyImports = desktop
     UploadsModule,
     NenposClientsModule,
     ...serverOnlyImports,
+    ...(desktop ? [SyncAgentModule] : []),
   ],
   providers: [
     {

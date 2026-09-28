@@ -6,6 +6,6 @@
     "resolvePackageJsonExports": false,
     "noEmit": true
   },
-  "include": ["./*.ts", "../src/sqlite-schema.ts"],
+  "include": ["./*.ts", "../src/sqlite-schema.ts", "../src/sqlite-sync-sql.ts", "../src/sync-tables.ts"],
   "ts-node": { "transpileOnly": true }
 }

@@ -38,6 +38,7 @@ suite('desktop mode (SQLite)', () => {
     const migrations = join(__dirname, '..', 'prisma', 'sqlite');
     expect(await runSqliteMigrations(db, migrations)).toEqual([
       '0001_baseline.sql',
+      '0002_sync_local.sql',
     ]);
     expect(await runSqliteMigrations(db, migrations)).toEqual([]); // idempotent
     await db.$disconnect();
@@ -89,7 +90,10 @@ suite('desktop mode (SQLite)', () => {
 
   it('does not expose server-only modules', async () => {
     expect((await http().get('/api/jobs').set(auth())).status).toBe(404);
-    expect((await http().get('/api/sync/status')).status).toBe(404);
+    expect((await http().get('/api/sync/devices').set(auth())).status).toBe(
+      404,
+    ); // server-side device admin
+    expect((await http().get('/api/sync/status').set(auth())).status).toBe(200); // local agent status
   });
 
   it('runs clients → inventory → job order → payment offline, with money intact', async () => {
