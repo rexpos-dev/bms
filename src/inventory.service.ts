@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InventoryItem, Prisma, StockMovementReason } from '@prisma/client';
+import { isPrismaError } from './prisma-errors';
 import { PrismaService } from './prisma.service';
 import { CreateInventoryItemDto } from './create-inventory-item.dto';
 import { UpdateInventoryItemDto } from './update-inventory-item.dto';
@@ -164,7 +165,7 @@ export class InventoryService {
   }
 
   private mapError(e: unknown): Error {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+    if (isPrismaError(e, 'P2002')) {
       return new BadRequestException('That barcode is already used by another item');
     }
     return e as Error;

@@ -1,8 +1,11 @@
 import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { isDesktopMode } from './app-mode';
+import { runSqliteMigrations } from './sqlite-migrator';
 
 /**
  * Apply any outstanding Prisma migrations before the app serves traffic.
@@ -30,8 +33,26 @@ function runMigrations() {
   }
 }
 
+/**
+ * Desktop mode: create/upgrade the local SQLite database from prisma/sqlite/*.sql
+ * before the app boots. Unlike the server path, a failure aborts startup — running
+ * against a half-migrated local database would corrupt offline work.
+ */
+async function runDesktopMigrations() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { PrismaClient } = require('../generated/sqlite-client') as typeof import('@prisma/client');
+  const db = new PrismaClient({ datasourceUrl: process.env.DESKTOP_DATABASE_URL });
+  try {
+    const applied = await runSqliteMigrations(db, join(__dirname, '..', 'prisma', 'sqlite'));
+    console.log(applied.length ? `Applied local migrations: ${applied.join(', ')}` : 'Local database is up to date.');
+  } finally {
+    await db.$disconnect();
+  }
+}
+
 async function bootstrap() {
-  runMigrations();
+  if (isDesktopMode()) await runDesktopMigrations();
+  else runMigrations();
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 

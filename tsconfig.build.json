@@ -6,6 +6,8 @@
     "dist",
     "admin-web",
     "prisma",
+    "scripts",
+    "generated",
     "**/*spec.ts",
     "mobile"
   ]

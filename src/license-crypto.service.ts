@@ -3,6 +3,7 @@ import { generateKeyPairSync } from 'crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import * as jwt from 'jsonwebtoken';
 import { join } from 'path';
+import { isDesktopMode } from './app-mode';
 
 export interface HardwareFingerprint {
   cpu: string;
@@ -31,6 +32,9 @@ export class LicenseCryptoService implements OnModuleInit {
   private publicKey!: string;
 
   onModuleInit() {
+    // Activation tokens are only ever signed on the server; a PC must not mint its own key pair.
+    if (isDesktopMode()) return;
+
     const privateKeyPath = join(this.keysDir, 'license-private.pem');
     const publicKeyPath = join(this.keysDir, 'license-public.pem');
 

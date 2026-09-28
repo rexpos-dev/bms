@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { isPrismaError } from './prisma-errors';
 import { PrismaService } from './prisma.service';
 import { CreateItemCategoryDto, UpdateItemCategoryDto } from './item-category.dto';
 
@@ -65,7 +66,7 @@ export class ItemCategoriesService {
   }
 
   private mapError(e: unknown): Error {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+    if (isPrismaError(e, 'P2002')) {
       return new ConflictException('A category with that name already exists');
     }
     return e as Error;

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { isPrismaError } from './prisma-errors';
 import { PrismaService } from './prisma.service';
 import { CreateItemPackageDto, UpdateItemPackageDto } from './create-item-package.dto';
 
@@ -108,7 +109,7 @@ export class ItemPackagesService {
   }
 
   private mapError(e: unknown): Error {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+    if (isPrismaError(e, 'P2002')) {
       return new BadRequestException('A package with that name already exists');
     }
     return e as Error;

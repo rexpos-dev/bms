@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { isPrismaError } from './prisma-errors';
 import { PrismaService } from './prisma.service';
 import { fromDeviceRow, toPullRow, type SyncRow } from './sync-serialize';
 import {
@@ -351,7 +352,7 @@ export class SyncService {
 
   private reasonFor(err: unknown): ConflictReason {
     if (err instanceof SyncReject) return err.reason;
-    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (isPrismaError(err)) {
       if (err.code === 'P2002') return 'DUPLICATE_KEY';
       if (err.code === 'P2003' || err.code === 'P2025') return 'INVALID';
     }

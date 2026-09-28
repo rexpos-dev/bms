@@ -3,6 +3,8 @@ node_modules
 .env
 
 /generated/prisma
+# SQLite Prisma client for the desktop app — rebuilt by `npm run gen:sqlite`
+/generated/sqlite-client
 
 # Generated RSA key pair used to sign license activation tokens
 /keys

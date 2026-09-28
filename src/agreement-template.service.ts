@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { isPrismaError } from './prisma-errors';
 import { PrismaService } from './prisma.service';
 import { AgreementSectionDto, SaveAgreementTemplateDto } from './save-agreement-template.dto';
 
@@ -46,7 +46,7 @@ export class AgreementTemplateService {
       // the max and trying again is the correct response to that — a second
       // collision means something worse than ordinary contention, so we let
       // that one propagate instead of looping.
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      if (isPrismaError(e, 'P2002')) {
         return this.attemptSave(dto, userId);
       }
       throw e;
