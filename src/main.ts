@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
 /**
@@ -32,7 +33,10 @@ function runMigrations() {
 async function bootstrap() {
   runMigrations();
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Offline-sync push batches (up to 200 ops incl. job order rows) exceed Express's 100 KB default.
+  app.useBodyParser('json', { limit: '5mb' });
 
   // Behind the Tailscale Funnel proxy the socket peer is loopback; trust its
   // X-Forwarded-For so req.ip (and per-IP rate limiting) sees the real client.

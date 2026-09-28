@@ -29,6 +29,7 @@ import { NotificationsModule } from './notifications.module';
 import { PaymentsModule } from './payments.module';
 import { PrismaModule } from './prisma.module';
 import { SoftwareProductsModule } from './software-products.module';
+import { SyncModule } from './sync.module';
 import { DownloadLeadsModule } from './download-leads.module';
 import { UploadsModule } from './uploads.module';
 import { UsersModule } from './users.module';
@@ -84,6 +85,7 @@ import { WithdrawalsModule } from './withdrawals.module';
     DevProjectsModule,
     NenposClientsModule,
     AppVersionModule,
+    SyncModule,
   ],
   providers: [
     {

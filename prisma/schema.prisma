@@ -811,6 +811,76 @@ model AuditLog {
 }
 
 // ---------------------------------------------------------------------------
+// Offline sync (desktop PCs <-> central server)
+// Spec: C:\Users\AGREX\.claude\plans\gusto-nako-i-install-refactored-flame.md
+// `sync_changes` is filled by MySQL triggers (see the sync_foundation migration),
+// never by application code.
+// ---------------------------------------------------------------------------
+
+/** A paired desktop PC. The device token is shown once at creation; only its hash is stored. */
+model SyncDevice {
+  id          String    @id @default(uuid())
+  name        String
+  tokenHash   String    @unique @map("token_hash")
+  lastSeenAt  DateTime? @map("last_seen_at")
+  /** Highest change-log seq this device has pulled. */
+  lastSeq     BigInt    @default(0) @map("last_seq")
+  revokedAt   DateTime? @map("revoked_at")
+  createdById String?   @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  conflicts SyncConflict[]
+  pushedOps SyncPushedOp[]
+
+  @@map("sync_devices")
+}
+
+/** Which row changed (I/U/D). State-based sync: pull re-reads the row's current state. */
+model SyncChange {
+  seq       BigInt   @id @default(autoincrement())
+  tableName String   @map("table_name") @db.VarChar(64)
+  recordId  String   @map("record_id") @db.VarChar(191)
+  op        String   @db.VarChar(1)
+  changedAt DateTime @default(now()) @map("changed_at")
+
+  @@index([tableName, recordId])
+  @@map("sync_changes")
+}
+
+/** Idempotency ledger: a device re-sending an op (after a dropped response) is a no-op. */
+model SyncPushedOp {
+  opId      String   @id @map("op_id")
+  deviceId  String   @map("device_id")
+  status    String   @db.VarChar(16) // APPLIED | CONFLICT | SKIPPED
+  createdAt DateTime @default(now()) @map("created_at")
+
+  device SyncDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId])
+  @@map("sync_pushed_ops")
+}
+
+/** A device edit the server refused (server wins); kept for an admin to review / re-apply. */
+model SyncConflict {
+  id           String    @id @default(uuid())
+  deviceId     String    @map("device_id")
+  tableName    String    @map("table_name") @db.VarChar(64)
+  recordId     String    @map("record_id") @db.VarChar(191)
+  op           String    @db.VarChar(1)
+  reason       String    @db.VarChar(32) // STALE | DELETED | DUPLICATE_KEY | INVALID
+  localRow     Json?     @map("local_row")
+  serverRow    Json?     @map("server_row")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  resolvedAt   DateTime? @map("resolved_at")
+  resolvedById String?   @map("resolved_by_id")
+
+  device SyncDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([resolvedAt])
+  @@map("sync_conflicts")
+}
+
+// ---------------------------------------------------------------------------
 // Developer Portal: Software Development Progress Tracking
 // ---------------------------------------------------------------------------
 
