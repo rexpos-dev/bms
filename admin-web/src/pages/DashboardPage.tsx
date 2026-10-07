@@ -173,6 +173,63 @@ function SuperAdminDashboard() {
   );
 }
 
+// Encoders only get the installation schedule calendar.
+function EncoderDashboard() {
+  const jobs = useList<Job>('dashboard-jobs', '/jobs');
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+  const calendarEvents = jobs.data?.map((job) => ({
+    date: new Date(job.scheduleDate),
+    title: job.client?.businessName ?? 'Job Assignment',
+    type: 'job' as const,
+  })) ?? [];
+
+  const selectedDateJobs = jobs.data?.filter(
+    (j) => new Date(j.scheduleDate).toDateString() === selectedDate?.toDateString()
+  ) ?? [];
+
+  return (
+    <>
+      <div style={{ marginTop: '2rem' }}>
+        <Calendar events={calendarEvents} onDateSelect={(d) => setSelectedDate(d)} />
+      </div>
+
+      <Dialog
+        isOpen={!!selectedDate}
+        onClose={() => setSelectedDate(null)}
+        title={selectedDate ? selectedDate.toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : ''}
+        maxWidth={640}
+      >
+        {selectedDateJobs.length === 0 ? (
+          <p style={{ color: 'var(--text-muted)' }}>No jobs scheduled on this date.</p>
+        ) : (
+          <table style={{ margin: 0 }}>
+            <thead>
+              <tr>
+                <th>Client</th>
+                <th>Status</th>
+                <th>Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {selectedDateJobs.map((job) => (
+                <tr key={job.id}>
+                  <td style={{ fontWeight: 500 }}>{job.client?.businessName ?? '—'}</td>
+                  <td><StatusBadge status={job.jobStatus} /></td>
+                  <td style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{job.remarks ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+          <button type="button" className="btn btn-secondary" onClick={() => setSelectedDate(null)}>Close</button>
+        </div>
+      </Dialog>
+    </>
+  );
+}
+
 function InstallerDashboard() {
   const jobs = useList<Job>('dashboard-my-jobs', '/jobs');
   const earnings = useList<Earning>('dashboard-my-earnings', '/earnings');
@@ -836,6 +893,7 @@ const ROLE_LABEL: Record<UserRole, string> = {
   LIAISON: 'Liaison',
   ADMIN_STAFF: 'Admin Staff',
   SALES_STAFF: 'Sales Staff',
+  ENCODER: 'Encoder',
 };
 
 function RoleTaskCard({ role, userId }: { role: UserRole; userId: string }) {
@@ -916,6 +974,7 @@ const SUBTITLE: Record<string, string> = {
   LIAISON: 'Coordinate with clients, manage communications, and track your earnings.',
   ADMIN_STAFF: 'Manage administrative tasks, monitor activities, and oversee operations.',
   SALES_STAFF: 'Manage clients, create job orders, and track your sales performance.',
+  ENCODER: 'Installation schedule at a glance.',
 };
 
 const QUICK_ACTION_ROLES = new Set(['SUPER_ADMIN', 'ADMIN_STAFF', 'SALES_STAFF', 'LIAISON']);
@@ -940,6 +999,7 @@ export function DashboardPage() {
       {user?.role === 'LIAISON' && <LiaisonDashboard />}
       {user?.role === 'ADMIN_STAFF' && <AdminStaffDashboard />}
       {user?.role === 'SALES_STAFF' && <SalesStaffDashboard />}
+      {user?.role === 'ENCODER' && <EncoderDashboard />}
 
       {user && <AdditionalRoleTasks user={user as AuthenticatedUser} />}
     </div>

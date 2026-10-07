@@ -88,6 +88,12 @@ suite('desktop mode (SQLite)', () => {
     expect(rows[0].v).toMatch(/^3\./);
   });
 
+  it('tells the UI it is the desktop backend (public endpoint)', async () => {
+    const res = await http().get('/api/app-info');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ mode: 'desktop' });
+  });
+
   it('does not expose server-only modules', async () => {
     expect((await http().get('/api/jobs').set(auth())).status).toBe(404);
     expect((await http().get('/api/sync/devices').set(auth())).status).toBe(

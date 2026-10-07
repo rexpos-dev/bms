@@ -17,13 +17,13 @@ import { JobsService } from './jobs.service';
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
-  @Roles(UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ENCODER)
   @Post()
   create(@Body() dto: CreateJobDto) {
     return this.jobsService.create(dto);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ENCODER)
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser, @Query('mine') mine?: string) {
     const userRoles: UserRole[] = user.roles ?? [user.role];
@@ -32,31 +32,31 @@ export class JobsController {
     return this.jobsService.findAll(userId, isInstallerRole ? UserRole.INSTALLER : user.role);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ENCODER)
   @Get('calendar/month')
   getCalendarMonth(@Query('month') month: string, @Query('year') year: string) {
     return this.jobsService.findByMonth(Number(month), Number(year));
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ENCODER)
   @Get('calendar/day')
   getCalendarDay(@Query('date') date: string) {
     return this.jobsService.findByDate(date);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ENCODER)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.jobsService.findOne(id);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.ENCODER)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateJobDto) {
     return this.jobsService.update(id, dto);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.ENCODER)
   @Patch(':id/assign')
   assignInstaller(@Param('id') id: string, @Body() dto: AssignInstallerDto) {
     return this.jobsService.assignInstaller(id, dto);

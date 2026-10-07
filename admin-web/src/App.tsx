@@ -33,7 +33,7 @@ function ProtectedShell() {
   const location = useLocation();
   if (!accessToken && location.pathname === '/') return <LandingPage />;
   return (
-    <RequireAuth roles={['SUPER_ADMIN', 'INSTALLER', 'DEVELOPER', 'DESIGNER', 'LIAISON', 'ADMIN_STAFF', 'SALES_STAFF']}>
+    <RequireAuth roles={['SUPER_ADMIN', 'INSTALLER', 'DEVELOPER', 'DESIGNER', 'LIAISON', 'ADMIN_STAFF', 'SALES_STAFF', 'ENCODER']}>
       <AdminLayout />
     </RequireAuth>
   );
@@ -69,7 +69,7 @@ function App() {
         <Route
           path="/jobs"
           element={
-            <RequireAuth roles={['SUPER_ADMIN', 'INSTALLER', 'ADMIN_STAFF', 'LIAISON', 'SALES_STAFF']}>
+            <RequireAuth roles={['SUPER_ADMIN', 'INSTALLER', 'ADMIN_STAFF', 'LIAISON', 'SALES_STAFF', 'ENCODER']}>
               <JobsPage />
             </RequireAuth>
           }
@@ -77,7 +77,7 @@ function App() {
         <Route
           path="/job-orders/software"
           element={
-            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'LIAISON', 'SALES_STAFF']}>
+            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'LIAISON', 'SALES_STAFF', 'ENCODER']}>
               <JobOrdersPage />
             </RequireAuth>
           }
@@ -85,7 +85,7 @@ function App() {
         <Route
           path="/job-orders/order/:joId"
           element={
-            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'DESIGNER', 'LIAISON', 'SALES_STAFF']}>
+            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'DESIGNER', 'LIAISON', 'SALES_STAFF', 'ENCODER']}>
               <JobOrderPage />
             </RequireAuth>
           }
@@ -93,7 +93,7 @@ function App() {
         <Route
           path="/job-orders/:jobId"
           element={
-            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'DESIGNER', 'LIAISON', 'SALES_STAFF']}>
+            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'DESIGNER', 'LIAISON', 'SALES_STAFF', 'ENCODER']}>
               <JobOrderPage />
             </RequireAuth>
           }
@@ -118,7 +118,7 @@ function App() {
         <Route
           path="/clients"
           element={
-            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'SALES_STAFF', 'LIAISON']}>
+            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'SALES_STAFF', 'LIAISON', 'ENCODER']}>
               <ClientsPage />
             </RequireAuth>
           }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { useAuthStore } from '../lib/auth-store';
 import { computeTotals } from '../lib/job-order-units';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
@@ -54,6 +55,8 @@ function TabButton({ label, active, count, onClick }: { label: string; active: b
 }
 
 export function JobOrdersPage() {
+  // Encoders don't see pricing.
+  const hidePrices = useAuthStore((s) => s.user?.role) === 'ENCODER';
   const navigate = useNavigate();
   const [showCreate, setShowCreate] = useState(false);
 
@@ -214,8 +217,8 @@ export function JobOrdersPage() {
                 <th>Client</th>
                 <th>Type</th>
                 <th>Product</th>
-                <th>Sale Price</th>
-                <th>Total</th>
+                {!hidePrices && <th>Sale Price</th>}
+                {!hidePrices && <th>Total</th>}
                 <th>Status</th>
                 <th>Created At</th>
                 <th></th>
@@ -243,8 +246,8 @@ export function JobOrdersPage() {
                       </span>
                     </td>
                     <td>{jo.product?.productName ?? (jo.type === 'SOFTWARE' ? jo.productId : '—')}</td>
-                    <td>₱{Number(jo.salePrice).toLocaleString()}</td>
-                    <td style={{ fontWeight: 600 }}>₱{grandTotal.toLocaleString()}</td>
+                    {!hidePrices && <td>₱{Number(jo.salePrice).toLocaleString()}</td>}
+                    {!hidePrices && <td style={{ fontWeight: 600 }}>₱{grandTotal.toLocaleString()}</td>}
                     <td>
                       <StatusBadge status={jo.status.toLowerCase()} />
                     </td>

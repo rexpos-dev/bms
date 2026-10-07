@@ -301,6 +301,8 @@ export function JobOrderPage() {
   });
 
   const role = useAuthStore((s) => s.user?.role);
+  // Encoders only encode the order; pricing stays hidden from them.
+  const hidePrices = role === 'ENCODER';
 
   // ── Fetch the parent record ──
   const jobQuery = useQuery({
@@ -697,6 +699,8 @@ export function JobOrderPage() {
 
   // A printed order reproduces the version it was pinned to; an unprinted one
   // follows the current template.
+  // Encoders can't see pricing, so their print is the letterhead + agreement only.
+  const printAgreement = includeAgreement || hidePrices;
   const agreementSections =
     jo?.agreementVersion?.sections ?? agreementTemplateQuery.data?.sections ?? [];
 
@@ -718,7 +722,7 @@ export function JobOrderPage() {
    * paper. A failure here must not stop the print — the pin retries next time.
    */
   const pinAgreement = async (id: string | undefined) => {
-    if (!includeAgreement || !id) return;
+    if (!printAgreement || !id) return;
     try {
       await api.post(`/job-orders/${id}/pin-agreement`);
       queryClient.invalidateQueries({ queryKey: ['job-order', jobId ?? standaloneId] });
@@ -857,8 +861,9 @@ export function JobOrderPage() {
           companyEmail={companyProfileQuery.data?.email ?? undefined}
           companyWebsite={companyProfileQuery.data?.website ?? undefined}
           companyTin={companyProfileQuery.data?.tin ?? undefined}
+          headerOnly={hidePrices}
         />
-        {includeAgreement && agreementSections.length > 0 && (
+        {printAgreement && agreementSections.length > 0 && (
           <ServiceAgreement
             sections={agreementSections}
             values={{
@@ -933,6 +938,7 @@ export function JobOrderPage() {
             >
               Finalize
             </button>
+            {!hidePrices && (
             <label
               style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}
               title="Appends the Service Level Agreement pages to the printed document"
@@ -947,6 +953,7 @@ export function JobOrderPage() {
                 <span style={{ color: 'var(--danger)' }}>— no materials, warranty lists will be empty</span>
               )}
             </label>
+            )}
             <button
               type="button"
               className="btn btn-secondary"
@@ -1059,7 +1066,7 @@ export function JobOrderPage() {
                       onChange={(e) => setLaborPct(Number(e.target.value) || 0)} />
                   </div>
                 )}
-                {!isSoftware && (
+                {!isSoftware && !hidePrices && (
                   <div className="field">
                     <label htmlFor="jo-sale-price">
                       {joType === 'SIGNAGE' ? 'Total Signage Price (₱)' : 'Contract Price (₱)'}
@@ -1115,22 +1122,24 @@ export function JobOrderPage() {
                               ))}
                             </select>
                           </div>
-                          <div className="field">
-                            <label htmlFor={`unit-price-${unit._key}`}>Sale Price (₱)</label>
-                            <input
-                              id={`unit-price-${unit._key}`}
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              value={unit.price}
-                              onChange={(e) => patch({ price: Number(e.target.value) || 0 })}
-                            />
-                            {unitProduct && (
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                List price: ₱{Number(unitProduct.price).toLocaleString()}
-                              </span>
-                            )}
-                          </div>
+                          {!hidePrices && (
+                            <div className="field">
+                              <label htmlFor={`unit-price-${unit._key}`}>Sale Price (₱)</label>
+                              <input
+                                id={`unit-price-${unit._key}`}
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                value={unit.price}
+                                onChange={(e) => patch({ price: Number(e.target.value) || 0 })}
+                              />
+                              {unitProduct && (
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                  List price: ₱{Number(unitProduct.price).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                          )}
                           <div className="field">
                             <label htmlFor={`unit-cloud-${unit._key}`}>Cloud Subscription (Monthly)</label>
                             {/* Inline overrides: `.field label`/`.field input` would otherwise uppercase the text and stretch the checkbox to full width. */}
@@ -1348,9 +1357,11 @@ export function JobOrderPage() {
                     {isSoftware && (
                       <div style={{ fontSize: '0.85rem', fontWeight: 700, margin: '0.25rem 0' }}>
                         {group.unit ? group.unit.label || 'Computer' : 'General'}
-                        <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>
-                          {' '}— ₱{group.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0).toLocaleString()}
-                        </span>
+                        {!hidePrices && (
+                          <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>
+                            {' '}— ₱{group.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0).toLocaleString()}
+                          </span>
+                        )}
                       </div>
                     )}
                 <table>
@@ -1361,8 +1372,8 @@ export function JobOrderPage() {
                       <th>Description</th>
                       {includeAgreement && <th style={{ width: 130 }}>Warranty</th>}
                       <th style={{ width: 60 }}>Qty</th>
-                      <th style={{ width: 120 }}>Price</th>
-                      <th style={{ width: 100 }}>Total</th>
+                      {!hidePrices && <th style={{ width: 120 }}>Price</th>}
+                      {!hidePrices && <th style={{ width: 100 }}>Total</th>}
                       <th style={{ width: 36 }}></th>
                     </tr>
                   </thead>
@@ -1406,19 +1417,23 @@ export function JobOrderPage() {
                             onChange={(e) => updateItem(item._key, { quantity: Number(e.target.value) || 1 })}
                           />
                         </td>
-                        <td>
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={item.unitPrice}
-                            style={{ width: '100%', border: 'none', background: 'transparent', color: 'var(--text)', textAlign: 'right', fontFamily: 'inherit', fontSize: '0.9rem' }}
-                            onChange={(e) => updateItem(item._key, { unitPrice: Number(e.target.value) })}
-                          />
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                          ₱{(item.quantity * item.unitPrice).toLocaleString()}
-                        </td>
+                        {!hidePrices && (
+                          <>
+                            <td>
+                              <input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                value={item.unitPrice}
+                                style={{ width: '100%', border: 'none', background: 'transparent', color: 'var(--text)', textAlign: 'right', fontFamily: 'inherit', fontSize: '0.9rem' }}
+                                onChange={(e) => updateItem(item._key, { unitPrice: Number(e.target.value) })}
+                              />
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                              ₱{(item.quantity * item.unitPrice).toLocaleString()}
+                            </td>
+                          </>
+                        )}
                         <td>
                           <button
                             type="button"
@@ -1497,17 +1512,19 @@ export function JobOrderPage() {
                         onChange={(e) => setCustomForm((f) => ({ ...f, quantity: Number(e.target.value) || 1 }))}
                       />
                     </div>
-                    <div className="field">
-                      <label htmlFor="custom-item-unit-price">Unit Price (₱)</label>
-                      <input
-                        id="custom-item-unit-price"
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={customForm.unitPrice}
-                        onChange={(e) => setCustomForm((f) => ({ ...f, unitPrice: Number(e.target.value) || 0 }))}
-                      />
-                    </div>
+                    {!hidePrices && (
+                      <div className="field">
+                        <label htmlFor="custom-item-unit-price">Unit Price (₱)</label>
+                        <input
+                          id="custom-item-unit-price"
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={customForm.unitPrice}
+                          onChange={(e) => setCustomForm((f) => ({ ...f, unitPrice: Number(e.target.value) || 0 }))}
+                        />
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button type="submit" className="btn btn-primary" style={{ fontSize: '0.85rem' }}>
@@ -1545,7 +1562,13 @@ export function JobOrderPage() {
             {/* Step 3: Payments */}
             {effectiveStep === 3 && jo?.id && (
               <>
-                <JobOrderPayments jobOrderId={jo.id} canVoid={role === 'SUPER_ADMIN' || role === 'ADMIN_STAFF'} />
+                {hidePrices ? (
+                  <div className="card" style={{ color: 'var(--text-muted)' }}>
+                    Finara Accounting ERP handles this.
+                  </div>
+                ) : (
+                  <JobOrderPayments jobOrderId={jo.id} canVoid={role === 'SUPER_ADMIN' || role === 'ADMIN_STAFF'} />
+                )}
                 <div>
                   <button type="button" className="btn btn-secondary" onClick={() => setStep(2)}>
                     ← Back
@@ -1557,77 +1580,79 @@ export function JobOrderPage() {
 
           {/* ── Right column: Summary ── */}
           <aside style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div className="card">
-              <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Order Summary</h2>
-              <table style={{ fontSize: '0.9rem', tableLayout: 'fixed' }}>
-                <tbody>
-                  <tr>
-                    <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>
-                      {joType === 'SOFTWARE'
-                        ? `System / Software (${units.length} computer${units.length === 1 ? '' : 's'})`
-                        : joType === 'CCTV' ? 'CCTV Contract' : 'Signage'}
-                    </td>
-                    <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{effectiveSalePrice.toLocaleString()}</td>
-                  </tr>
-                  {items.length > 0 && (
+            {!hidePrices && (
+              <div className="card">
+                <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Order Summary</h2>
+                <table style={{ fontSize: '0.9rem', tableLayout: 'fixed' }}>
+                  <tbody>
                     <tr>
-                      <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>Materials ({items.length} item{items.length > 1 ? 's' : ''})</td>
-                      <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{materialsTotal.toLocaleString()}</td>
+                      <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>
+                        {joType === 'SOFTWARE'
+                          ? `System / Software (${units.length} computer${units.length === 1 ? '' : 's'})`
+                          : joType === 'CCTV' ? 'CCTV Contract' : 'Signage'}
+                      </td>
+                      <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{effectiveSalePrice.toLocaleString()}</td>
                     </tr>
-                  )}
-                  {cloudTotal > 0 && (
+                    {items.length > 0 && (
+                      <tr>
+                        <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>Materials ({items.length} item{items.length > 1 ? 's' : ''})</td>
+                        <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{materialsTotal.toLocaleString()}</td>
+                      </tr>
+                    )}
+                    {cloudTotal > 0 && (
+                      <tr>
+                        <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>Cloud subscription</td>
+                        <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{cloudTotal.toLocaleString()}</td>
+                      </tr>
+                    )}
                     <tr>
-                      <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>Cloud subscription</td>
-                      <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{cloudTotal.toLocaleString()}</td>
+                      <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>Subtotal</td>
+                      <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{subtotal.toLocaleString()}</td>
                     </tr>
-                  )}
-                  <tr>
-                    <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>Subtotal</td>
-                    <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{subtotal.toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td colSpan={2} style={{ paddingLeft: 0, paddingRight: 0, borderBottom: 'none' }}>
-                      <div className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
-                        <label htmlFor="jo-discount" style={{ color: 'var(--success)', flexShrink: 0 }}>
-                          Discount
-                        </label>
-                        <input
-                          id="jo-discount"
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          style={{ flex: 1, minWidth: 0, width: 'auto', textAlign: 'right', padding: '0.45rem 0.6rem' }}
-                          value={discount}
-                          onChange={(e) => setDiscount(Number(e.target.value))}
-                        />
-                        <select
-                          value={discountType}
-                          style={{ width: 68, flexShrink: 0, padding: '0.45rem 0.6rem' }}
-                          onChange={(e) => setDiscountType(e.target.value as DiscountType)}
-                        >
-                          <option value="FIXED">₱</option>
-                          <option value="PERCENTAGE">%</option>
-                        </select>
-                      </div>
-                      {discount > 0 && (
-                        <div style={{ textAlign: 'right', color: 'var(--success)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                          −₱{discountAmt.toLocaleString()}{discountType === 'PERCENTAGE' ? ` (${discount}%)` : ''}
+                    <tr>
+                      <td colSpan={2} style={{ paddingLeft: 0, paddingRight: 0, borderBottom: 'none' }}>
+                        <div className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
+                          <label htmlFor="jo-discount" style={{ color: 'var(--success)', flexShrink: 0 }}>
+                            Discount
+                          </label>
+                          <input
+                            id="jo-discount"
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            style={{ flex: 1, minWidth: 0, width: 'auto', textAlign: 'right', padding: '0.45rem 0.6rem' }}
+                            value={discount}
+                            onChange={(e) => setDiscount(Number(e.target.value))}
+                          />
+                          <select
+                            value={discountType}
+                            style={{ width: 68, flexShrink: 0, padding: '0.45rem 0.6rem' }}
+                            onChange={(e) => setDiscountType(e.target.value as DiscountType)}
+                          >
+                            <option value="FIXED">₱</option>
+                            <option value="PERCENTAGE">%</option>
+                          </select>
                         </div>
-                      )}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td colSpan={2} style={{ borderBottom: '2px solid var(--border)', padding: 0 }} />
-                  </tr>
-                  <tr>
-                    <td style={{ fontWeight: 700, paddingLeft: 0 }}>Grand Total</td>
-                    <td style={{ fontWeight: 700, fontSize: '1.2rem', textAlign: 'right', paddingRight: 0, color: 'var(--accent)' }}>
-                      ₱{grandTotal.toLocaleString()}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                        {discount > 0 && (
+                          <div style={{ textAlign: 'right', color: 'var(--success)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                            −₱{discountAmt.toLocaleString()}{discountType === 'PERCENTAGE' ? ` (${discount}%)` : ''}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colSpan={2} style={{ borderBottom: '2px solid var(--border)', padding: 0 }} />
+                    </tr>
+                    <tr>
+                      <td style={{ fontWeight: 700, paddingLeft: 0 }}>Grand Total</td>
+                      <td style={{ fontWeight: 700, fontSize: '1.2rem', textAlign: 'right', paddingRight: 0, color: 'var(--accent)' }}>
+                        ₱{grandTotal.toLocaleString()}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {joType !== 'SOFTWARE' && (
               <div className="card">

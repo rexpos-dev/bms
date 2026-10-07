@@ -55,6 +55,8 @@ export interface SyncAgentStatus {
   lastSyncAt: string | null;
   lastError: string | null;
   rejectedUnseen: number;
+  /** Bumps whenever a sync changed local data (rows pulled/removed) — the UI refreshes when it moves. */
+  changes: number;
 }
 
 /** Reasons after which the local copy is dropped: the server will never accept this row. */
@@ -97,6 +99,7 @@ export class SyncAgentService implements OnModuleInit, OnModuleDestroy {
   private online: boolean | null = null;
   private lastSyncAt: string | null = null;
   private lastError: string | null = null;
+  private changeCounter = 0;
   private timer?: NodeJS.Timeout;
   private debounce?: NodeJS.Timeout;
   private abort?: AbortController;
@@ -172,6 +175,7 @@ export class SyncAgentService implements OnModuleInit, OnModuleDestroy {
       sinceSeq: Number((await this.getState('since_seq')) ?? 0),
       lastSyncAt: this.lastSyncAt ?? (await this.getState('last_sync_at')),
       lastError: this.lastError,
+      changes: this.changeCounter,
       rejectedUnseen: await this.count(
         'SELECT COUNT(*) AS c FROM "_sync_rejected" WHERE "seen_at" IS NULL',
       ),
@@ -443,6 +447,7 @@ export class SyncAgentService implements OnModuleInit, OnModuleDestroy {
 
   /** Remove a local row the server will never accept — without queueing a delete. */
   private async dropLocal(def: SyncTableDef, id: string) {
+    this.changeCounter++;
     await this.applying(async (tx) => {
       await this.delegate(tx, def).deleteMany({ where: { id } });
       await tx.$executeRawUnsafe(
@@ -477,6 +482,7 @@ export class SyncAgentService implements OnModuleInit, OnModuleDestroy {
    */
   private async applyEntries(entries: PullEntry[]) {
     if (entries.length === 0) return;
+    this.changeCounter++;
     const pending = new Set(
       (
         await this.prisma.$queryRawUnsafe<

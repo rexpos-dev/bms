@@ -122,6 +122,12 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, NavItem[]> = {
     { to: '/download-leads', label: 'Download Leads' },
     { to: '/audit-logs', label: 'Audit Logs' },
   ],
+  ENCODER: [
+    { to: '/', label: 'Dashboard', end: true },
+    { to: '/clients', label: 'Clients' },
+    { to: '/job-orders/software', label: 'Project Job Orders' },
+    { to: '/jobs', label: 'Installations' },
+  ],
   SALES_STAFF: [
     { to: '/', label: 'Dashboard', end: true },
     { to: '/clients', label: 'Clients' },
@@ -144,6 +150,7 @@ const ROLE_LABEL: Record<UserRole, string> = {
   LIAISON: 'Liaison',
   ADMIN_STAFF: 'Staff',
   SALES_STAFF: 'Sales',
+  ENCODER: 'Encoder',
 };
 
 function buildMergedNav(primaryRole: UserRole, allRoles: UserRole[]): NavItem[] {

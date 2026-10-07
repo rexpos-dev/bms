@@ -54,10 +54,12 @@ export class UsersController {
     return { linked, updated, skipped, unmatched };
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.ENCODER)
   @Get()
-  findAll(@Query('role') role?: UserRole) {
-    return this.usersService.findAll(role);
+  findAll(@CurrentUser() user: AuthenticatedUser, @Query('role') role?: UserRole) {
+    // Encoders only need the installer list for job assignment.
+    const isEncoderOnly = user.role === UserRole.ENCODER;
+    return this.usersService.findAll(isEncoderOnly ? UserRole.INSTALLER : role);
   }
 
   @Roles(UserRole.SUPER_ADMIN)

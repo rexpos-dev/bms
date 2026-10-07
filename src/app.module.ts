@@ -6,6 +6,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { AppInfoController } from './app-info.controller';
 import { isDesktopMode } from './app-mode';
 import { AgreementTemplateModule } from './agreement-template.module';
 import { AppVersionModule } from './app-version.module';
@@ -103,6 +104,7 @@ const serverOnlyImports = desktop
     ...serverOnlyImports,
     ...(desktop ? [SyncAgentModule] : []),
   ],
+  controllers: [AppInfoController],
   providers: [
     {
       provide: APP_INTERCEPTOR,

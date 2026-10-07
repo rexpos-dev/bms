@@ -22,25 +22,25 @@ import { UpdateClientDto } from './update-client.dto';
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.ENCODER)
   @Post()
   create(@Body() dto: CreateClientDto) {
     return this.clientsService.create(dto);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.DESIGNER)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.DESIGNER, UserRole.ENCODER)
   @Get()
   findAll(@Query('type') type?: ClientType) {
     return this.clientsService.findAll(type);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.DESIGNER)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.DESIGNER, UserRole.ENCODER)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.clientsService.findOne(id);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.ENCODER)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateClientDto) {
     return this.clientsService.update(id, dto);

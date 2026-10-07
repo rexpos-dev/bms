@@ -26,6 +26,7 @@ enum UserRole {
   LIAISON
   ADMIN_STAFF
   SALES_STAFF
+  ENCODER
 }
 
 enum IncentiveStatus {

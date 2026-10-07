@@ -14,40 +14,40 @@ export class JobOrdersController {
   constructor(private readonly jobOrdersService: JobOrdersService) {}
 
   /** Create or update the job order (upsert by jobId) */
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ENCODER)
   @Post()
   upsert(@Body() dto: UpsertJobOrderDto, @CurrentUser() user: AuthenticatedUser) {
     return this.jobOrdersService.upsert(dto, user);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ENCODER)
   @Get()
   findAll() {
     return this.jobOrdersService.findAll();
   }
 
   /** Get the job order for a specific job — returns null if not yet created */
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.DESIGNER)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.DESIGNER, UserRole.ENCODER)
   @Get('by-job/:jobId')
   findByJob(@Param('jobId') jobId: string) {
     return this.jobOrdersService.findByJob(jobId);
   }
 
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.DESIGNER)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.DESIGNER, UserRole.ENCODER)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.jobOrdersService.findOne(id);
   }
 
   /** Standalone quotation → job order: creates the installation job and links it */
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ENCODER)
   @Post(':id/convert')
   convert(@Param('id') id: string, @Body() dto: ConvertJobOrderDto) {
     return this.jobOrdersService.convert(id, dto);
   }
 
   /** Locks the order's agreement text — called by the print and download handlers */
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ENCODER)
   @Post(':id/pin-agreement')
   pinAgreement(@Param('id') id: string) {
     return this.jobOrdersService.pinAgreement(id);

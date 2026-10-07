@@ -5,6 +5,7 @@ export type UserRole =
   | 'DESIGNER'
   | 'LIAISON'
   | 'ADMIN_STAFF'
+  | 'ENCODER'
   | 'SALES_STAFF';
 
 export interface AuthUser {

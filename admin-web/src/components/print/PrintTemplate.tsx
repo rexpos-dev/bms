@@ -41,6 +41,8 @@ interface PrintTemplateProps {
   companyEmail?: string;
   companyWebsite?: string;
   companyTin?: string;
+  /** Print only the letterhead (no client box, items or prices) — used for agreement-only prints. */
+  headerOnly?: boolean;
 }
 
 export function PrintTemplate({
@@ -48,7 +50,7 @@ export function PrintTemplate({
   salePrice, subtotal, discountAmt, materialsTotal, grandTotal,
   amountPaid, balanceDue,
   items, remarks, status, createdAt, companyName, companyLogoUrl,
-  companyAddress, companyPhone, companyEmail, companyWebsite, companyTin,
+  companyAddress, companyPhone, companyEmail, companyWebsite, companyTin, headerOnly,
 }: PrintTemplateProps) {
   const p = (n: number) => `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const meta = DOC_META[docType];
@@ -90,6 +92,7 @@ export function PrintTemplate({
         </div>
       </div>
 
+      {headerOnly ? null : (<>
       {/* Client info */}
       <div style={{ border: '1px solid #ccc', borderRadius: '4pt', padding: '6pt 8pt', marginBottom: '8pt', lineHeight: 1.25, fontSize: '10pt' }}>
         <strong>Client Information</strong>
@@ -280,6 +283,7 @@ export function PrintTemplate({
           {docType === 'QUOTATION' ? 'Conforme / Client Representative' : 'Received by / Client Representative'}
         </div>
       </div>
+      </>)}
     </div>
   );
 }

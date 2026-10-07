@@ -10,7 +10,7 @@ import type { PayrollEmployee, TeamMember, UserRole } from '../lib/types';
 
 const ALL_ROLES: UserRole[] = [
   'SUPER_ADMIN', 'ADMIN_STAFF', 'SALES_STAFF', 'INSTALLER', 'DEVELOPER',
-  'DESIGNER', 'LIAISON',
+  'DESIGNER', 'LIAISON', 'ENCODER',
 ];
 
 const ROLE_LABEL: Record<UserRole, string> = {
@@ -21,6 +21,7 @@ const ROLE_LABEL: Record<UserRole, string> = {
   DEVELOPER:        'Developer',
   DESIGNER:         'Designer',
   LIAISON:          'Liaison',
+  ENCODER:          'Encoder',
 };
 
 const ROLE_COLOR: Record<UserRole, string> = {
@@ -31,6 +32,7 @@ const ROLE_COLOR: Record<UserRole, string> = {
   DEVELOPER:        '#16a34a',
   DESIGNER:         '#d97706',
   LIAISON:          '#db2777',
+  ENCODER:          '#6366f1',
 };
 
 const EMPTY_FORM = {

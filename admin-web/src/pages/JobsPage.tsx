@@ -860,7 +860,7 @@ function InstallerJobsTable({ data, isLoading, isError, onUpdateStatus, onOpenPr
   );
 }
 
-const ADMIN_PRIMARY_ROLES = new Set(['SUPER_ADMIN', 'ADMIN_STAFF', 'LIAISON', 'SALES_STAFF']);
+const ADMIN_PRIMARY_ROLES = new Set(['SUPER_ADMIN', 'ADMIN_STAFF', 'LIAISON', 'SALES_STAFF', 'ENCODER']);
 const READ_ONLY_ROLES = new Set(['SALES_STAFF']);
 
 export function JobsPage() {
